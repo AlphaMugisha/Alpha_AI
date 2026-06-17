@@ -27,6 +27,9 @@ import { timeAgo } from "@/lib/utils";
 import { StudySession } from "@/types";
 import { CommitGoalWidget } from "@/components/github/CommitGoalWidget";
 import { NewRepoPrompt } from "@/components/github/NewRepoPrompt";
+import { LiveClock } from "@/components/dashboard/LiveClock";
+import { RotatingQuote } from "@/components/dashboard/RotatingQuote";
+import { useAuth } from "@/hooks/useAuth";
 
 const quickActions = [
   {
@@ -99,6 +102,9 @@ function getGreeting() {
 export default function DashboardPage() {
   const { recentSessions, stats } = useStudyData();
   const { hasApiKey } = useSettings();
+  const { profile } = useAuth();
+
+  const firstName = profile?.full_name?.trim().split(" ")[0];
 
   const statCards = [
     { label: "Total Sessions", value: stats.totalSessions, icon: BookOpen, color: "text-blue-500" },
@@ -120,13 +126,18 @@ export default function DashboardPage() {
             <div className="absolute top-0 right-0 w-64 h-64 bg-white rounded-full blur-3xl translate-x-1/2 -translate-y-1/2" />
           </div>
           <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-            <div>
-              <h2 className="text-3xl font-bold mb-1">{getGreeting()} 👋</h2>
+            <div className="max-w-md">
+              <h2 className="text-3xl font-bold mb-1">
+                {getGreeting()}
+                {firstName ? `, ${firstName}` : ""} 👋
+              </h2>
               <p className="text-violet-200 text-lg">
                 Ready to learn something new today?
               </p>
+              <RotatingQuote />
             </div>
-            <div className="flex gap-3">
+            <div className="flex flex-col items-start md:items-end gap-4">
+              <LiveClock />
               <Button
                 asChild
                 className="bg-white text-violet-700 hover:bg-violet-50 font-semibold"
