@@ -1,0 +1,19 @@
+
+> studypilot-ai@0.1.0 dev
+> next dev
+
+⚠ Port 3000 is in use by process 30652, using available port 3001 instead.
+▲ Next.js 16.2.9 (Turbopack)
+- Local:         http://localhost:3001
+- Network:       http://192.168.56.1:3001
+- Environments: .env.local
+✓ Ready in 1083ms
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          30652
+- Dir:          C:\xampp\StudyPilot
+- Log:          .next\dev\logs\next-development.log
+
+Run taskkill /PID 30652 /F to stop it.
+[?25h
