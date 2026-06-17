@@ -13,9 +13,9 @@ export function Hero() {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden pt-20">
       {/* Background gradients */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-violet-400/20 rounded-full blur-3xl animate-pulse" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-400/20 rounded-full blur-3xl animate-pulse delay-1000" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-purple-400/10 rounded-full blur-3xl" />
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-amber-400/20 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-amber-400/20 rounded-full blur-3xl animate-pulse delay-1000" />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-amber-400/10 rounded-full blur-3xl" />
       </div>
 
       <div className="container max-w-6xl mx-auto px-6 text-center">
@@ -23,7 +23,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
-          className="inline-flex items-center gap-2 bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 px-4 py-2 rounded-full text-sm font-medium mb-8 border border-violet-200 dark:border-violet-800"
+          className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 px-4 py-2 rounded-full text-sm font-medium mb-8 border border-amber-200 dark:border-amber-800"
         >
           <Sparkles className="w-4 h-4" />
           Powered by Google Gemini 2.5 Flash
@@ -60,7 +60,7 @@ export function Hero() {
             <Button
               asChild
               size="lg"
-              className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-lg px-8 h-12 shadow-lg shadow-violet-500/25"
+              className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-lg px-8 h-12 shadow-lg shadow-amber-500/25"
             >
               <Link href="/dashboard">
                 Go to Dashboard <ArrowRight className="ml-2 w-5 h-5" />
@@ -71,7 +71,7 @@ export function Hero() {
               <Button
                 asChild
                 size="lg"
-                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-lg px-8 h-12 shadow-lg shadow-violet-500/25"
+                className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-lg px-8 h-12 shadow-lg shadow-amber-500/25"
               >
                 <Link href="/signup">
                   Start Studying Free <ArrowRight className="ml-2 w-5 h-5" />

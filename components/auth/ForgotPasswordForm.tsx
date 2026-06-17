@@ -28,14 +28,14 @@ export function ForgotPasswordForm() {
     return (
       <Card className="border-border/50 shadow-xl">
         <CardContent className="pt-10 pb-8 flex flex-col items-center gap-4 text-center">
-          <div className="w-14 h-14 rounded-full bg-violet-500/10 flex items-center justify-center">
-            <Mail className="w-7 h-7 text-violet-500" />
+          <div className="w-14 h-14 rounded-full bg-amber-500/10 flex items-center justify-center">
+            <Mail className="w-7 h-7 text-amber-500" />
           </div>
           <div>
             <h2 className="text-xl font-semibold">Email sent</h2>
             <p className="text-muted-foreground text-sm mt-1">{success}</p>
           </div>
-          <Link href="/login" className="text-violet-500 hover:text-violet-400 text-sm font-medium transition-colors">
+          <Link href="/login" className="text-amber-500 hover:text-amber-400 text-sm font-medium transition-colors">
             Back to login
           </Link>
         </CardContent>
@@ -87,7 +87,7 @@ export function ForgotPasswordForm() {
 
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Remember your password?{" "}
-          <Link href="/login" className="text-violet-500 hover:text-violet-400 font-medium transition-colors">
+          <Link href="/login" className="text-amber-500 hover:text-amber-400 font-medium transition-colors">
             Sign in
           </Link>
         </p>

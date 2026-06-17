@@ -44,7 +44,7 @@ import { cn } from "@/lib/utils";
 const CATEGORY_META: Record<string, { label: string; color: string }> = {
   project: {
     label: "Project",
-    color: "bg-violet-100 text-violet-700 dark:bg-violet-950/30 dark:text-violet-400",
+    color: "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400",
   },
   submission: {
     label: "Submission",
@@ -227,7 +227,7 @@ export default function ReposPage() {
                 >
                   <Card
                     className={cn(
-                      isFocus && "border-violet-400 dark:border-violet-700",
+                      isFocus && "border-amber-400 dark:border-amber-700",
                       repo.done && "opacity-60"
                     )}
                   >
@@ -253,7 +253,7 @@ export default function ReposPage() {
                           </Badge>
                         )}
                         {isFocus && (
-                          <Badge className="text-xs shrink-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                          <Badge className="text-xs shrink-0 bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300">
                             <Target className="w-3 h-3 mr-1" /> Focus
                           </Badge>
                         )}

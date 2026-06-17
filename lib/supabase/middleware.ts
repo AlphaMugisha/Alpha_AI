@@ -11,6 +11,7 @@ const PROTECTED = [
   "/planner",
   "/projects",
   "/repos",
+  "/profile",
   "/settings",
 ];
 
@@ -49,10 +50,17 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  // Refresh session — MUST call getUser() not getSession()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // Refresh session — MUST call getUser() not getSession().
+  // Guard against transient network failures talking to Supabase: a thrown
+  // fetch here would 500 every request (including login/signup Server Actions,
+  // surfacing as "An unexpected response was received from the server").
+  let user = null;
+  try {
+    const result = await supabase.auth.getUser();
+    user = result.data.user;
+  } catch {
+    return supabaseResponse;
+  }
 
   const { pathname } = request.nextUrl;
 

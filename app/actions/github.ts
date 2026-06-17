@@ -54,10 +54,15 @@ export async function connectGithub(token: string) {
   if (!trimmed) return { error: "Please paste a token." };
 
   // Validate the token against GitHub and capture the username.
-  const res = await fetch(`${GH}/user`, {
-    headers: ghHeaders(trimmed),
-    cache: "no-store",
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${GH}/user`, {
+      headers: ghHeaders(trimmed),
+      cache: "no-store",
+    });
+  } catch {
+    return { error: "Couldn't reach GitHub. Check your connection and try again." };
+  }
   if (!res.ok) {
     return {
       error:
@@ -147,12 +152,16 @@ type GhRepo = {
 };
 
 async function fetchGhRepos(token: string): Promise<GhRepo[] | null> {
-  const res = await fetch(
-    `${GH}/user/repos?per_page=100&sort=pushed&affiliation=owner`,
-    { headers: ghHeaders(token), cache: "no-store" }
-  );
-  if (!res.ok) return null;
-  return (await res.json()) as GhRepo[];
+  try {
+    const res = await fetch(
+      `${GH}/user/repos?per_page=100&sort=pushed&affiliation=owner`,
+      { headers: ghHeaders(token), cache: "no-store" }
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as GhRepo[];
+  } catch {
+    return null;
+  }
 }
 
 export async function listRepos(): Promise<{
@@ -266,7 +275,7 @@ export async function classifyRepo(
   fullName: string,
   category: "project" | "submission" | "revision" | null
 ) {
-  const { supabase, user } = await getProfile();
+  const { supabase, user, profile } = await getProfile();
   if (!user) return { error: "Not signed in." };
 
   if (category === null) {
@@ -284,7 +293,111 @@ export async function classifyRepo(
       );
     if (error) return { error: error.message };
   }
+
+  // Classifying counts as "seen" — stop showing it in the new-repo prompt.
+  await supabase
+    .from("seen_repos")
+    .upsert(
+      { repo_full_name: fullName },
+      { onConflict: "user_id,repo_full_name", ignoreDuplicates: true }
+    );
+
+  // Tagging a repo as a Project drops it straight into the Project Manager.
+  if (category === "project" && profile?.github_token) {
+    const { data: existing } = await supabase
+      .from("coding_projects")
+      .select("id")
+      .eq("repo_full_name", fullName)
+      .maybeSingle();
+    if (!existing) {
+      try {
+        const res = await fetch(`${GH}/repos/${fullName}`, {
+          headers: ghHeaders(profile.github_token),
+          cache: "no-store",
+        });
+        if (res.ok) {
+          const r = await res.json();
+          await supabase.from("coding_projects").insert({
+            name: r.name,
+            description: r.description ?? "",
+            status: "in-progress",
+            tech_stack: r.language ? [r.language] : [],
+            repo_url: r.html_url,
+            live_url: r.homepage || null,
+            priority: "medium",
+            progress: 0,
+            repo_full_name: r.full_name,
+          });
+        }
+      } catch {
+        // Network blip — classification still saved; project can be synced later.
+      }
+    }
+  }
+
   revalidatePath("/repos");
+  revalidatePath("/projects");
+  return { success: true };
+}
+
+export interface NewRepo {
+  name: string;
+  fullName: string;
+  htmlUrl: string;
+  language: string | null;
+  private: boolean;
+}
+
+/**
+ * Repos that exist on GitHub but Alpha hasn't shown the user yet.
+ * On the very first run we silently seed every current repo as "seen", so the
+ * user is only ever prompted about repos created *after* connecting.
+ */
+export async function detectNewRepos(): Promise<{
+  newRepos: NewRepo[];
+  error?: string;
+}> {
+  const { supabase, user, profile } = await getProfile();
+  if (!user || !profile?.github_token) return { newRepos: [] };
+
+  const gh = await fetchGhRepos(profile.github_token);
+  if (!gh) return { newRepos: [], error: "Could not reach GitHub." };
+
+  const { data: seen } = await supabase
+    .from("seen_repos")
+    .select("repo_full_name");
+  const seenSet = new Set((seen ?? []).map((s) => s.repo_full_name));
+
+  if (seenSet.size === 0) {
+    if (gh.length > 0) {
+      await supabase
+        .from("seen_repos")
+        .insert(gh.map((r) => ({ repo_full_name: r.full_name })));
+    }
+    return { newRepos: [] };
+  }
+
+  const newRepos: NewRepo[] = gh
+    .filter((r) => !seenSet.has(r.full_name))
+    .map((r) => ({
+      name: r.name,
+      fullName: r.full_name,
+      htmlUrl: r.html_url,
+      language: r.language,
+      private: r.private,
+    }));
+  return { newRepos };
+}
+
+export async function dismissNewRepo(fullName: string) {
+  const { supabase, user } = await getProfile();
+  if (!user) return { error: "Not signed in." };
+  await supabase
+    .from("seen_repos")
+    .upsert(
+      { repo_full_name: fullName },
+      { onConflict: "user_id,repo_full_name", ignoreDuplicates: true }
+    );
   return { success: true };
 }
 
@@ -315,20 +428,30 @@ export async function getCommitGoal(startOfDayISO: string): Promise<CommitGoal> 
   const url = `${GH}/repos/${focusRepo}/commits?author=${encodeURIComponent(
     profile.github_username
   )}&since=${encodeURIComponent(startOfDayISO)}&per_page=100`;
-  const res = await fetch(url, {
-    headers: ghHeaders(profile.github_token),
-    cache: "no-store",
-  });
-  if (!res.ok) {
+  try {
+    const res = await fetch(url, {
+      headers: ghHeaders(profile.github_token),
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      return {
+        connected: true,
+        focusRepo,
+        dailyGoal,
+        count: 0,
+        error: `GitHub error (${res.status})`,
+      };
+    }
+    const commits = await res.json();
+    const count = Array.isArray(commits) ? commits.length : 0;
+    return { connected: true, focusRepo, dailyGoal, count };
+  } catch {
     return {
       connected: true,
       focusRepo,
       dailyGoal,
       count: 0,
-      error: `GitHub error (${res.status})`,
+      error: "Couldn't reach GitHub.",
     };
   }
-  const commits = await res.json();
-  const count = Array.isArray(commits) ? commits.length : 0;
-  return { connected: true, focusRepo, dailyGoal, count };
 }

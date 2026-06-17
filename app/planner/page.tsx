@@ -307,7 +307,7 @@ export default function PlannerPage() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-violet-500" /> Generate AI Study Plan
+                  <Sparkles className="w-4 h-4 text-amber-500" /> Generate AI Study Plan
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">

@@ -2,10 +2,17 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { motion } from "framer-motion";
-import { getCommitGoal, type CommitGoal } from "@/app/actions/github";
+import {
+  getCommitGoal,
+  listRepos,
+  setFocusRepo,
+  type CommitGoal,
+  type RepoInfo,
+} from "@/app/actions/github";
+import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Github, RefreshCw, Target, ArrowRight, Flame } from "lucide-react";
+import { Github, RefreshCw, Target, ArrowRight, Flame, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +62,8 @@ function Ring({ pct, count, goal }: { pct: number; count: number; goal: number }
 export function CommitGoalWidget() {
   const [data, setData] = useState<CommitGoal | null>(null);
   const [loading, setLoading] = useState(true);
+  const [repos, setRepos] = useState<RepoInfo[] | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -68,6 +77,26 @@ export function CommitGoalWidget() {
   useEffect(() => {
     load();
   }, [load]);
+
+  // When connected but no focus repo yet, fetch the repo list for the inline picker.
+  useEffect(() => {
+    if (data?.connected && !data.focusRepo && repos === null) {
+      listRepos().then((res) => setRepos(res.repos ?? [])).catch(() => setRepos([]));
+    }
+  }, [data, repos]);
+
+  const chooseFocus = async (fullName: string) => {
+    if (!fullName) return;
+    setSaving(true);
+    const res = await setFocusRepo(fullName);
+    if (res?.error) {
+      toast.error(res.error);
+      setSaving(false);
+      return;
+    }
+    await load(); // reloads commit goal → big number appears
+    setSaving(false);
+  };
 
   // Not connected → prompt to connect.
   if (!loading && data && !data.connected) {
@@ -93,23 +122,49 @@ export function CommitGoalWidget() {
     );
   }
 
-  // Connected but no focus repo chosen.
+  // Connected but no focus repo chosen → let them pick one right here.
   if (!loading && data && data.connected && !data.focusRepo) {
     return (
       <Card>
-        <CardContent className="p-5 flex items-center gap-4">
-          <div className="w-11 h-11 rounded-xl bg-muted flex items-center justify-center shrink-0">
-            <Target className="w-5 h-5 text-violet-500" />
+        <CardContent className="p-5">
+          <div className="flex items-center gap-2 mb-1">
+            <Target className="w-4 h-4 text-violet-500" />
+            <h3 className="font-semibold">Daily Commit Goal</h3>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm">Pick a focus repo</p>
-            <p className="text-xs text-muted-foreground">
-              Choose which repo to track for your daily commit goal.
+          <p className="text-sm text-muted-foreground mb-3">
+            Pick the repo you want to track {data.dailyGoal} commits/day on:
+          </p>
+          {repos === null ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin" /> Loading your repos…
+            </div>
+          ) : repos.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No repos found.{" "}
+              <Link href="/repos" className="text-primary hover:underline">
+                Open My Repos
+              </Link>
             </p>
-          </div>
-          <Button asChild size="sm" variant="outline">
-            <Link href="/repos">Choose repo</Link>
-          </Button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <select
+                defaultValue=""
+                disabled={saving}
+                onChange={(e) => chooseFocus(e.target.value)}
+                className="flex-1 h-9 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-violet-500"
+              >
+                <option value="" disabled>
+                  Choose a repo…
+                </option>
+                {repos.map((r) => (
+                  <option key={r.fullName} value={r.fullName}>
+                    {r.name}
+                  </option>
+                ))}
+              </select>
+              {saving && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -141,16 +196,32 @@ export function CommitGoalWidget() {
                 <Github className="w-3 h-3" /> {data.focusRepo}
               </a>
             )}
-            <p className={cn("text-sm font-medium", done ? "text-green-600 dark:text-green-400" : "")}>
-              {loading
-                ? "Checking GitHub…"
-                : data?.error
-                ? "Couldn't reach GitHub — check your token."
-                : done
-                ? `🎉 Goal smashed! ${count} commits today.`
-                : count === 0
-                ? `0 commits yet today — time to start! ${goal} to go.`
-                : `${remaining} more commit${remaining === 1 ? "" : "s"} to hit your goal.`}
+
+            {/* BIG "how many commits left" focal point */}
+            {loading ? (
+              <p className="text-sm text-muted-foreground">Checking GitHub…</p>
+            ) : data?.error ? (
+              <p className="text-sm font-medium text-destructive">
+                Couldn&apos;t reach GitHub — check your token.
+              </p>
+            ) : done ? (
+              <p className="text-4xl font-bold text-green-600 dark:text-green-400 leading-none">
+                🎉 Goal reached!
+              </p>
+            ) : (
+              <p className="leading-none">
+                <span className="text-5xl font-bold text-violet-600 dark:text-violet-400">
+                  {remaining}
+                </span>
+                <span className="text-2xl font-bold text-foreground ml-2">
+                  commit{remaining === 1 ? "" : "s"} to go
+                </span>
+              </p>
+            )}
+
+            {/* Always show today's progress vs goal */}
+            <p className="text-sm text-muted-foreground mt-2">
+              {count} of {goal} commits done today
             </p>
             <Button
               variant="ghost"

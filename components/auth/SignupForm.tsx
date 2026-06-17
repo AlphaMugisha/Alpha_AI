@@ -82,6 +82,20 @@ export function SignupForm() {
           </div>
 
           <div className="space-y-2">
+            <Label htmlFor="username">Username</Label>
+            <Input
+              id="username"
+              name="username"
+              type="text"
+              placeholder="alphamugisha"
+              required
+              autoComplete="username"
+              pattern="[a-zA-Z0-9_.\-]{3,30}"
+              title="3–30 characters: letters, numbers, and . _ - only"
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
@@ -90,6 +104,20 @@ export function SignupForm() {
               placeholder="you@example.com"
               required
               autoComplete="email"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone">
+              Phone{" "}
+              <span className="text-muted-foreground font-normal">(optional)</span>
+            </Label>
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              placeholder="+1 555 123 4567"
+              autoComplete="tel"
             />
           </div>
 

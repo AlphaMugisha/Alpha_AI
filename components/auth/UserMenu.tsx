@@ -39,7 +39,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-violet-500">
+        <button className="flex items-center gap-2 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-amber-500">
           <Avatar className="h-8 w-8 border-2 border-violet-500/30 hover:border-violet-500 transition-colors">
             <AvatarImage src={profile?.avatar_url ?? ""} alt={displayName} />
             <AvatarFallback className="bg-gradient-to-br from-violet-500 to-indigo-600 text-white text-xs font-semibold">
@@ -64,7 +64,7 @@ export function UserMenu() {
           Settings
         </DropdownMenuItem>
 
-        <DropdownMenuItem onClick={() => router.push("/settings")}>
+        <DropdownMenuItem onClick={() => router.push("/profile")}>
           <User className="mr-2 h-4 w-4" />
           Profile
         </DropdownMenuItem>

@@ -40,14 +40,14 @@ export function LoginForm() {
 
         <form action={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="identifier">Username, email, or phone</Label>
             <Input
-              id="email"
-              name="email"
-              type="email"
-              placeholder="you@example.com"
+              id="identifier"
+              name="identifier"
+              type="text"
+              placeholder="yourname, you@example.com, or +1…"
               required
-              autoComplete="email"
+              autoComplete="username"
             />
           </div>
 

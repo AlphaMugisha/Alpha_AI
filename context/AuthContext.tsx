@@ -15,6 +15,8 @@ export interface Profile {
   id: string;
   full_name: string | null;
   avatar_url: string | null;
+  username: string | null;
+  phone: string | null;
   gemini_api_key: string;
   openai_api_key: string;
   ai_provider: string;
@@ -56,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .from("profiles")
         // Explicit columns — never ship github_token to the browser.
         .select(
-          "id, full_name, avatar_url, gemini_api_key, openai_api_key, ai_provider, daily_goal_minutes, default_difficulty, notifications_enabled, created_at, updated_at"
+          "id, full_name, avatar_url, username, phone, gemini_api_key, openai_api_key, ai_provider, daily_goal_minutes, default_difficulty, notifications_enabled, created_at, updated_at"
         )
         .eq("id", userId)
         .single();

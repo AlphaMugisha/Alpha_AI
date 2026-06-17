@@ -64,13 +64,13 @@ export function HowItWorks() {
               className="relative text-center"
             >
               {i < steps.length - 1 && (
-                <div className="hidden lg:block absolute top-8 left-[60%] w-[80%] h-px border-t-2 border-dashed border-violet-200 dark:border-violet-800 z-0" />
+                <div className="hidden lg:block absolute top-8 left-[60%] w-[80%] h-px border-t-2 border-dashed border-amber-200 dark:border-amber-800 z-0" />
               )}
               <div className="relative z-10">
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-violet-500/25">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-500/25">
                   <step.icon className="w-8 h-8 text-white" />
                 </div>
-                <div className="text-violet-600 dark:text-violet-400 font-bold text-sm mb-2">
+                <div className="text-amber-600 dark:text-amber-400 font-bold text-sm mb-2">
                   Step {step.step}
                 </div>
                 <h3 className="font-bold text-lg mb-3">{step.title}</h3>

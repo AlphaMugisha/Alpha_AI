@@ -67,7 +67,7 @@ export function TopProgressBar() {
           className="fixed top-0 left-0 right-0 z-[9999] h-[3px] bg-transparent pointer-events-none"
         >
           <motion.div
-            className="h-full bg-gradient-to-r from-violet-500 via-purple-500 to-indigo-500 shadow-[0_0_10px_rgba(139,92,246,0.7)]"
+            className="h-full bg-gradient-to-r from-amber-500 via-purple-500 to-amber-500 shadow-[0_0_10px_rgba(139,92,246,0.7)]"
             animate={{ width: `${width}%` }}
             transition={{ duration: 0.3, ease: "easeOut" }}
           />

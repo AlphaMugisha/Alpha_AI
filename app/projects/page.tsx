@@ -322,7 +322,7 @@ export default function ProjectsPage() {
       {projects.length > 0 && (
         <div className="grid grid-cols-3 gap-4 mb-6">
           {[
-            { label: "Total Projects", value: stats.total, icon: FolderKanban, color: "text-violet-500" },
+            { label: "Total Projects", value: stats.total, icon: FolderKanban, color: "text-amber-500" },
             { label: "In Progress", value: stats.active, icon: Rocket, color: "text-amber-500" },
             { label: "Completed", value: stats.completed, icon: Check, color: "text-green-500" },
           ].map((s) => (
@@ -692,7 +692,7 @@ export default function ProjectsPage() {
             <>
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
-                  <ListChecks className="w-4 h-4 text-violet-500" />
+                  <ListChecks className="w-4 h-4 text-amber-500" />
                   {detail.name} — Tasks
                 </DialogTitle>
               </DialogHeader>

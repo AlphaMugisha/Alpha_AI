@@ -4,10 +4,28 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
+const USERNAME_RE = /^[a-zA-Z0-9_.-]{3,30}$/;
+
 export async function signIn(formData: FormData) {
   const supabase = await createClient();
-  const email = formData.get("email") as string;
+  const identifier = ((formData.get("identifier") as string) || "").trim();
   const password = formData.get("password") as string;
+
+  if (!identifier || !password) {
+    return { error: "Enter your login and password." };
+  }
+
+  // Resolve username / phone to the account email. An email is used as-is.
+  let email = identifier;
+  if (!identifier.includes("@")) {
+    const { data, error } = await supabase.rpc("get_email_for_login", {
+      identifier,
+    });
+    if (error || !data) {
+      return { error: "No account found with that username, email, or phone." };
+    }
+    email = data as string;
+  }
 
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: error.message };
@@ -18,15 +36,31 @@ export async function signIn(formData: FormData) {
 
 export async function signUp(formData: FormData) {
   const supabase = await createClient();
-  const email = formData.get("email") as string;
+  const email = ((formData.get("email") as string) || "").trim();
   const password = formData.get("password") as string;
-  const fullName = formData.get("fullName") as string;
+  const fullName = ((formData.get("fullName") as string) || "").trim();
+  const username = ((formData.get("username") as string) || "").trim();
+  const phone = ((formData.get("phone") as string) || "").trim();
+
+  if (!USERNAME_RE.test(username)) {
+    return {
+      error:
+        "Username must be 3–30 characters: letters, numbers, and . _ - only.",
+    };
+  }
+
+  const { data: available } = await supabase.rpc("username_available", {
+    uname: username,
+  });
+  if (available === false) {
+    return { error: "That username is already taken — try another." };
+  }
 
   const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: { full_name: fullName },
+      data: { full_name: fullName, username, phone: phone || null },
       emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"}/auth/callback`,
     },
   });

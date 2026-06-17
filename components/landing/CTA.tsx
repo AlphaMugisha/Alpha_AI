@@ -32,7 +32,7 @@ export function CTA() {
             <h2 className="text-4xl md:text-5xl font-bold mb-4">
               Ready to Transform Your Studies?
             </h2>
-            <p className="text-violet-100 text-lg max-w-xl mx-auto mb-8">
+            <p className="text-amber-100 text-lg max-w-xl mx-auto mb-8">
               Join thousands of students already using Alpha. Create a
               free account and bring your own Gemini or OpenAI API key to get
               started instantly.
@@ -43,7 +43,7 @@ export function CTA() {
                 <Button
                   asChild
                   size="lg"
-                  className="bg-white text-violet-700 hover:bg-violet-50 text-lg px-8 h-12 font-semibold"
+                  className="bg-white text-amber-700 hover:bg-amber-50 text-lg px-8 h-12 font-semibold"
                 >
                   <Link href="/dashboard">
                     Go to Dashboard <ArrowRight className="ml-2 w-5 h-5" />
@@ -54,7 +54,7 @@ export function CTA() {
                   <Button
                     asChild
                     size="lg"
-                    className="bg-white text-violet-700 hover:bg-violet-50 text-lg px-8 h-12 font-semibold"
+                    className="bg-white text-amber-700 hover:bg-amber-50 text-lg px-8 h-12 font-semibold"
                   >
                     <Link href="/signup">
                       Create Free Account <ArrowRight className="ml-2 w-5 h-5" />

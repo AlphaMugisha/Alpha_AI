@@ -188,7 +188,7 @@ export function GithubSettings() {
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-sm">
-                <Target className="w-4 h-4 text-violet-500" />
+                <Target className="w-4 h-4 text-amber-500" />
                 <span className="text-muted-foreground">Focus repo:</span>
                 <span className="font-medium">
                   {status?.focusRepo ?? "not set"}

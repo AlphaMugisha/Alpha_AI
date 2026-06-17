@@ -46,7 +46,7 @@ const DIFFICULTY_CONFIG = {
   advanced: {
     label: "Advanced",
     icon: GraduationCap,
-    color: "from-violet-500 to-purple-600",
+    color: "from-violet-500 to-indigo-600",
     desc: "Deep dive with technical details and nuances",
   },
 } as const;

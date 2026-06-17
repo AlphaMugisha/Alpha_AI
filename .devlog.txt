@@ -2,18 +2,40 @@
 > studypilot-ai@0.1.0 dev
 > next dev
 
-⚠ Port 3000 is in use by process 30652, using available port 3001 instead.
 ▲ Next.js 16.2.9 (Turbopack)
-- Local:         http://localhost:3001
-- Network:       http://192.168.56.1:3001
+- Local:         http://localhost:3000
+- Network:       http://192.168.56.1:3000
 - Environments: .env.local
-✓ Ready in 1083ms
-⨯ Another next dev server is already running.
+✓ Ready in 952ms
 
-- Local:        http://localhost:3000
-- PID:          30652
-- Dir:          C:\xampp\StudyPilot
-- Log:          .next\dev\logs\next-development.log
-
-Run taskkill /PID 30652 /F to stop it.
-[?25h
+○ Compiling /dashboard ...
+ GET /login 200 in 8.2s (next.js: 7.6s, proxy.ts: 85ms, application-code: 486ms)
+ GET /dashboard?next=%2Fdashboard 200 in 17.8s (next.js: 14.3s, proxy.ts: 1262ms, application-code: 2.2s)
+ POST /dashboard?next=%2Fdashboard 200 in 2.2s (next.js: 47ms, proxy.ts: 297ms, application-code: 1901ms)
+  └─ ƒ detectNewRepos() in 1818ms app/actions/github.ts
+ POST /dashboard?next=%2Fdashboard 200 in 916ms (next.js: 17ms, proxy.ts: 285ms, application-code: 614ms)
+  └─ ƒ getCommitGoal("2026-06-16T22:00:00.000Z") in 583ms app/actions/github.ts
+ GET /dashboard?next=%2Fdashboard 200 in 765ms (next.js: 40ms, proxy.ts: 383ms, application-code: 342ms)
+ POST /dashboard?next=%2Fdashboard 200 in 2.3s (next.js: 16ms, proxy.ts: 212ms, application-code: 2.1s)
+  └─ ƒ detectNewRepos() in 2043ms app/actions/github.ts
+ POST /dashboard?next=%2Fdashboard 200 in 759ms (next.js: 51ms, proxy.ts: 262ms, application-code: 446ms)
+  └─ ƒ getCommitGoal("2026-06-16T22:00:00.000Z") in 420ms app/actions/github.ts
+✓ Compiled in 407ms
+ GET /dashboard?next=%2Fdashboard 200 in 1410ms (next.js: 417ms, proxy.ts: 683ms, application-code: 310ms)
+ POST /dashboard?next=%2Fdashboard 200 in 1551ms (next.js: 24ms, proxy.ts: 882ms, application-code: 644ms)
+  └─ ƒ getCommitGoal("2026-06-16T22:00:00.000Z") in 581ms app/actions/github.ts
+✓ Compiled in 466ms
+ GET /dashboard?next=%2Fdashboard 200 in 1468ms (next.js: 433ms, proxy.ts: 703ms, application-code: 332ms)
+ POST /dashboard?next=%2Fdashboard 200 in 1627ms (next.js: 23ms, proxy.ts: 949ms, application-code: 655ms)
+  └─ ƒ getCommitGoal("2026-06-16T22:00:00.000Z") in 592ms app/actions/github.ts
+ GET /dashboard?next=%2Fdashboard 200 in 1342ms (next.js: 17ms, proxy.ts: 330ms, application-code: 995ms)
+ POST /dashboard?next=%2Fdashboard 200 in 2.1s (next.js: 14ms, proxy.ts: 209ms, application-code: 1839ms)
+  └─ ƒ detectNewRepos() in 1806ms app/actions/github.ts
+ POST /dashboard?next=%2Fdashboard 200 in 791ms (next.js: 13ms, proxy.ts: 286ms, application-code: 492ms)
+  └─ ƒ getCommitGoal("2026-06-16T22:00:00.000Z") in 464ms app/actions/github.ts
+ GET /dashboard?next=%2Fdashboard 200 in 704ms (next.js: 13ms, proxy.ts: 368ms, application-code: 323ms)
+ POST /dashboard?next=%2Fdashboard 200 in 2.0s (next.js: 13ms, proxy.ts: 287ms, application-code: 1744ms)
+  └─ ƒ detectNewRepos() in 1706ms app/actions/github.ts
+ POST /dashboard?next=%2Fdashboard 200 in 772ms (next.js: 11ms, proxy.ts: 278ms, application-code: 483ms)
+  └─ ƒ getCommitGoal("2026-06-16T22:00:00.000Z") in 456ms app/actions/github.ts
+✓ Compiled in 545ms

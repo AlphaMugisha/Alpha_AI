@@ -18,6 +18,7 @@ const PAGE_TITLES: Record<string, string> = {
   "/planner": "Study Planner",
   "/projects": "Project Manager",
   "/repos": "My Repos",
+  "/profile": "Profile",
   "/settings": "Settings",
 };
 

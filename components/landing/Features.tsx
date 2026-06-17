@@ -25,7 +25,7 @@ const features = [
     title: "Smart Notes Generator",
     description:
       "Upload PDFs, DOCXs, or text files and get beautifully structured, comprehensive study notes in seconds.",
-    color: "from-violet-500 to-purple-600",
+    color: "from-violet-500 to-indigo-600",
   },
   {
     icon: Brain,
@@ -60,7 +60,7 @@ const features = [
     title: "AI Insights",
     description:
       "Get personalized study insights and recommendations based on your learning patterns and progress.",
-    color: "from-indigo-500 to-blue-600",
+    color: "from-amber-500 to-blue-600",
   },
   {
     icon: Shield,
@@ -81,7 +81,7 @@ export function Features() {
           viewport={{ once: true }}
           className="text-center mb-16"
         >
-          <div className="inline-flex items-center gap-2 bg-violet-100 dark:bg-violet-950/50 text-violet-700 dark:text-violet-300 px-4 py-2 rounded-full text-sm font-medium mb-6 border border-violet-200 dark:border-violet-800">
+          <div className="inline-flex items-center gap-2 bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 px-4 py-2 rounded-full text-sm font-medium mb-6 border border-amber-200 dark:border-amber-800">
             Everything You Need
           </div>
           <h2 className="text-4xl md:text-5xl font-bold mb-4">

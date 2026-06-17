@@ -26,6 +26,7 @@ import Link from "next/link";
 import { timeAgo } from "@/lib/utils";
 import { StudySession } from "@/types";
 import { CommitGoalWidget } from "@/components/github/CommitGoalWidget";
+import { NewRepoPrompt } from "@/components/github/NewRepoPrompt";
 
 const quickActions = [
   {
@@ -97,7 +98,7 @@ function getGreeting() {
 
 export default function DashboardPage() {
   const { recentSessions, stats } = useStudyData();
-  const { hasApiKey, aiConfig } = useSettings();
+  const { hasApiKey } = useSettings();
 
   const statCards = [
     { label: "Total Sessions", value: stats.totalSessions, icon: BookOpen, color: "text-blue-500" },
@@ -137,6 +138,9 @@ export default function DashboardPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* New repo detector — pops a prompt when GitHub has repos Alpha hasn't seen */}
+        <NewRepoPrompt />
 
         {/* Daily commit goal */}
         <CommitGoalWidget />
