@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
-import { NavigationProgress } from "@/components/shared/NavigationProgress";
 import { AuthProvider } from "@/context/AuthContext";
 
 export const metadata: Metadata = {
@@ -27,7 +26,6 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            <NavigationProgress />
             {children}
             <Toaster richColors position="top-right" />
           </AuthProvider>
