@@ -4,9 +4,11 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStudyData } from "@/hooks/useStudyData";
-import { quizDb } from "@/lib/db";
-import { formatDate, cn } from "@/lib/utils";
-import { Quiz, QuizQuestion, ExamSummary } from "@/types";
+import { useSettings } from "@/hooks/useSettings";
+import { quizDb, notesDb } from "@/lib/db";
+import { generateQuiz } from "@/lib/ai";
+import { generateId, formatDate, cn } from "@/lib/utils";
+import { Quiz, QuizQuestion, Note, ExamSummary } from "@/types";
 import { toast } from "sonner";
 import {
   ClipboardCheck,
@@ -22,6 +24,8 @@ import {
   Trophy,
   AlertTriangle,
   ListChecks,
+  FileText,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -46,8 +51,10 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import Link from "next/link";
 
 type Phase = "setup" | "taking" | "results";
+type Source = "quiz" | "lesson";
 
 const DURATION_OPTIONS = ["5", "10", "15", "20", "30", "45", "60"];
+const QUESTION_OPTIONS = ["5", "10", "15", "20"];
 
 function formatClock(totalSeconds: number) {
   const m = Math.floor(totalSeconds / 60);
@@ -57,14 +64,20 @@ function formatClock(totalSeconds: number) {
 
 export default function ExamPage() {
   const { addSession } = useStudyData();
+  const { aiConfig, hasApiKey } = useSettings();
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [notes, setNotes] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [phase, setPhase] = useState<Phase>("setup");
+  const [source, setSource] = useState<Source>("quiz");
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
+  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
+  const [numQuestions, setNumQuestions] = useState("10");
   const [duration, setDuration] = useState("15");
   const [passMark, setPassMark] = useState(50);
+  const [building, setBuilding] = useState(false);
 
   const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
   const [answers, setAnswers] = useState<(number | null)[]>([]);
@@ -74,13 +87,24 @@ export default function ExamPage() {
   const [confirmSubmit, setConfirmSubmit] = useState(false);
   const [summary, setSummary] = useState<ExamSummary | null>(null);
 
-  // ----- load saved quizzes -----
+  // ----- load saved quizzes + lessons (notes) -----
   useEffect(() => {
-    quizDb
-      .getAll()
-      .then(setQuizzes)
-      .catch(() => toast.error("Could not load quizzes."))
+    Promise.all([quizDb.getAll(), notesDb.getAll()])
+      .then(([qs, ns]) => {
+        setQuizzes(qs);
+        setNotes(ns);
+      })
+      .catch(() => toast.error("Could not load your library."))
       .finally(() => setLoading(false));
+  }, []);
+
+  // ----- deep link from Notes: /exam?lesson=<id> -----
+  useEffect(() => {
+    const lessonId = new URLSearchParams(window.location.search).get("lesson");
+    if (lessonId) {
+      setSource("lesson");
+      setSelectedNoteId(lessonId);
+    }
   }, []);
 
   const totalSeconds = useMemo(() => parseInt(duration) * 60, [duration]);
@@ -139,12 +163,7 @@ export default function ExamPage() {
   }, [phase, timeLeft, submitExam]);
 
   // ----- start -----
-  const startExam = () => {
-    const quiz = quizzes.find((q) => q.id === selectedQuizId);
-    if (!quiz) {
-      toast.error("Pick a quiz to take as an exam.");
-      return;
-    }
+  const beginExam = (quiz: Quiz) => {
     setActiveQuiz(quiz);
     setAnswers(new Array(quiz.questions.length).fill(null));
     setFlagged(new Array(quiz.questions.length).fill(false));
@@ -152,6 +171,53 @@ export default function ExamPage() {
     setTimeLeft(parseInt(duration) * 60);
     setSummary(null);
     setPhase("taking");
+  };
+
+  const startExam = async () => {
+    if (source === "quiz") {
+      const quiz = quizzes.find((q) => q.id === selectedQuizId);
+      if (!quiz) {
+        toast.error("Pick a quiz to take as an exam.");
+        return;
+      }
+      beginExam(quiz);
+      return;
+    }
+
+    // Lesson → summarize what was learned into a fresh quiz.
+    const note = notes.find((n) => n.id === selectedNoteId);
+    if (!note) {
+      toast.error("Pick a lesson to be examined on.");
+      return;
+    }
+    if (!hasApiKey) {
+      toast.error("Add your Gemini API key in Settings to build a lesson exam.");
+      return;
+    }
+    setBuilding(true);
+    try {
+      const questions = await generateQuiz(
+        aiConfig,
+        note.content,
+        parseInt(numQuestions)
+      );
+      const quiz: Quiz = {
+        id: generateId(),
+        title: note.title,
+        questions,
+        sourceContent: note.content.slice(0, 500),
+        createdAt: new Date(),
+      };
+      await quizDb.save(quiz).catch(() => {});
+      beginExam(quiz);
+      toast.success(`Built a ${questions.length}-question exam from your lesson.`);
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to build exam from lesson."
+      );
+    } finally {
+      setBuilding(false);
+    }
   };
 
   const restart = () => {
@@ -190,7 +256,7 @@ export default function ExamPage() {
     return (
       <DashboardLayout>
         <div className="max-w-5xl mx-auto">
-          {/* Sticky exam bar */}
+          {/* Exam bar */}
           <div className="flex items-center justify-between gap-4 mb-6 p-4 rounded-2xl border bg-card/80 backdrop-blur-sm">
             <div className="min-w-0">
               <h2 className="font-semibold truncate">{activeQuiz.title}</h2>
@@ -440,7 +506,7 @@ export default function ExamPage() {
                 </div>
               </div>
               <div className="flex gap-3 justify-center">
-                <Button variant="outline" onClick={startExam}>
+                <Button variant="outline" onClick={() => beginExam(activeQuiz)}>
                   <RotateCcw className="w-4 h-4 mr-2" /> Retake
                 </Button>
                 <Button
@@ -510,11 +576,13 @@ export default function ExamPage() {
   }
 
   // ============================ SETUP ============================
+  const canStart = source === "quiz" ? !!selectedQuizId : !!selectedNoteId;
+
   return (
     <DashboardLayout>
       <PageHeader
         title="Exam Mode"
-        description="Take a saved quiz under timed exam conditions — no hints until you finish"
+        description="Sit a timed exam from a saved quiz, or from a lesson you've studied"
         icon={<ClipboardCheck className="w-5 h-5" />}
       />
 
@@ -522,115 +590,254 @@ export default function ExamPage() {
         <div className="flex items-center justify-center py-24 text-muted-foreground">
           <Loader2 className="w-6 h-6 animate-spin" />
         </div>
-      ) : quizzes.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4">
-            <ClipboardCheck className="w-8 h-8 text-white" />
-          </div>
-          <h3 className="font-semibold text-lg mb-2">No quizzes to examine yet</h3>
-          <p className="text-muted-foreground text-sm max-w-sm mb-6">
-            Exam Mode runs your saved quizzes against a timer. Create one in the
-            Quiz Generator first, then come back to sit it as an exam.
-          </p>
-          <Button
-            asChild
-            className="bg-gradient-to-r from-violet-600 to-indigo-600"
-          >
-            <Link href="/quiz">Go to Quiz Generator</Link>
-          </Button>
-        </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Pick a quiz */}
-          <div className="lg:col-span-2">
-            <h3 className="font-semibold mb-3">Choose a quiz</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {quizzes.map((quiz) => {
-                const selected = selectedQuizId === quiz.id;
-                return (
-                  <button
-                    key={quiz.id}
-                    onClick={() => setSelectedQuizId(quiz.id)}
-                    className={cn(
-                      "text-left p-4 rounded-xl border-2 transition-all",
-                      selected
-                        ? "border-primary bg-primary/5 shadow-sm"
-                        : "border-border hover:border-primary/40 hover:bg-muted/40"
-                    )}
+        <>
+          <Tabs
+            value={source}
+            onValueChange={(v) => setSource(v as Source)}
+            className="mb-6"
+          >
+            <TabsList>
+              <TabsTrigger value="quiz">
+                <Target className="w-4 h-4 mr-2" /> Saved Quiz
+              </TabsTrigger>
+              <TabsTrigger value="lesson">
+                <FileText className="w-4 h-4 mr-2" /> From a Lesson
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Source list */}
+            <div className="lg:col-span-2">
+              {source === "quiz" ? (
+                quizzes.length === 0 ? (
+                  <SourceEmpty
+                    title="No saved quizzes yet"
+                    body="Create a quiz in the Quiz Generator, then sit it here as an exam."
+                    href="/quiz"
+                    cta="Go to Quiz Generator"
+                  />
+                ) : (
+                  <>
+                    <h3 className="font-semibold mb-3">Choose a quiz</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {quizzes.map((quiz) => (
+                        <SelectableCard
+                          key={quiz.id}
+                          selected={selectedQuizId === quiz.id}
+                          onClick={() => setSelectedQuizId(quiz.id)}
+                          title={quiz.title}
+                          meta={
+                            <>
+                              <Target className="w-3 h-3" />
+                              {quiz.questions.length} questions
+                              <Clock className="w-3 h-3 ml-1" />
+                              {formatDate(quiz.createdAt)}
+                            </>
+                          }
+                        />
+                      ))}
+                    </div>
+                  </>
+                )
+              ) : notes.length === 0 ? (
+                <SourceEmpty
+                  title="No lessons saved yet"
+                  body="Upload study material in the Notes Generator. Your saved notes become lessons you can be examined on."
+                  href="/notes"
+                  cta="Go to Notes Generator"
+                />
+              ) : (
+                <>
+                  <h3 className="font-semibold mb-1">Choose a lesson</h3>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    We&apos;ll summarize what you learned and build a fresh exam
+                    from it.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {notes.map((note) => (
+                      <SelectableCard
+                        key={note.id}
+                        selected={selectedNoteId === note.id}
+                        onClick={() => setSelectedNoteId(note.id)}
+                        title={note.title}
+                        meta={
+                          <>
+                            <FileText className="w-3 h-3" />
+                            {note.sourceFile ?? "Lesson"}
+                            <Clock className="w-3 h-3 ml-1" />
+                            {formatDate(note.createdAt)}
+                          </>
+                        }
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Exam settings */}
+            <div>
+              <h3 className="font-semibold mb-3">Exam settings</h3>
+              <Card>
+                <CardContent className="p-5 space-y-5">
+                  {source === "lesson" && (
+                    <div>
+                      <Label className="text-sm mb-2 block">
+                        Number of questions
+                      </Label>
+                      <Select
+                        value={numQuestions}
+                        onValueChange={setNumQuestions}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {QUESTION_OPTIONS.map((n) => (
+                            <SelectItem key={n} value={n}>
+                              {n} questions
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
+                  <div>
+                    <Label className="text-sm mb-2 block">Time limit</Label>
+                    <Select value={duration} onValueChange={setDuration}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {DURATION_OPTIONS.map((n) => (
+                          <SelectItem key={n} value={n}>
+                            {n} minutes
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm">Pass mark</Label>
+                      <span className="text-sm font-semibold">{passMark}%</span>
+                    </div>
+                    <Slider
+                      value={[passMark]}
+                      min={0}
+                      max={100}
+                      step={5}
+                      onValueChange={([v]) => setPassMark(v)}
+                    />
+                  </div>
+
+                  <div className="flex items-start gap-2 text-xs text-muted-foreground p-3 rounded-lg bg-muted/50">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
+                    No answers or explanations are shown until you submit. The
+                    exam auto-submits when time runs out.
+                  </div>
+
+                  <Button
+                    onClick={startExam}
+                    disabled={!canStart || building}
+                    className="w-full bg-gradient-to-r from-violet-600 to-indigo-600"
                   >
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <h4 className="font-medium text-sm">{quiz.title}</h4>
-                      {selected && (
-                        <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
-                          <Check className="w-3 h-3" />
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Target className="w-3 h-3" />
-                      {quiz.questions.length} questions
-                      <Clock className="w-3 h-3 ml-1" />
-                      {formatDate(quiz.createdAt)}
-                    </div>
-                  </button>
-                );
-              })}
+                    {building ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Building
+                        exam…
+                      </>
+                    ) : source === "lesson" ? (
+                      <>
+                        <Sparkles className="w-4 h-4 mr-2" /> Summarize & Start
+                      </>
+                    ) : (
+                      <>
+                        <ClipboardCheck className="w-4 h-4 mr-2" /> Start Exam
+                      </>
+                    )}
+                  </Button>
+
+                  {source === "lesson" && !hasApiKey && (
+                    <p className="text-center text-xs text-muted-foreground">
+                      <Link href="/settings" className="text-primary hover:underline">
+                        Add your API key
+                      </Link>{" "}
+                      to build lesson exams.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </div>
-
-          {/* Exam settings */}
-          <div>
-            <h3 className="font-semibold mb-3">Exam settings</h3>
-            <Card>
-              <CardContent className="p-5 space-y-5">
-                <div>
-                  <Label className="text-sm mb-2 block">Time limit</Label>
-                  <Select value={duration} onValueChange={setDuration}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DURATION_OPTIONS.map((n) => (
-                        <SelectItem key={n} value={n}>
-                          {n} minutes
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <Label className="text-sm">Pass mark</Label>
-                    <span className="text-sm font-semibold">{passMark}%</span>
-                  </div>
-                  <Slider
-                    value={[passMark]}
-                    min={0}
-                    max={100}
-                    step={5}
-                    onValueChange={([v]) => setPassMark(v)}
-                  />
-                </div>
-
-                <div className="flex items-start gap-2 text-xs text-muted-foreground p-3 rounded-lg bg-muted/50">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
-                  No answers or explanations are shown until you submit. The exam
-                  auto-submits when time runs out.
-                </div>
-
-                <Button
-                  onClick={startExam}
-                  disabled={!selectedQuizId}
-                  className="w-full bg-gradient-to-r from-violet-600 to-indigo-600"
-                >
-                  <ClipboardCheck className="w-4 h-4 mr-2" /> Start Exam
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
+        </>
       )}
     </DashboardLayout>
+  );
+}
+
+// ----- small presentational helpers -----
+function SelectableCard({
+  selected,
+  onClick,
+  title,
+  meta,
+}: {
+  selected: boolean;
+  onClick: () => void;
+  title: string;
+  meta: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        "text-left p-4 rounded-xl border-2 transition-all",
+        selected
+          ? "border-primary bg-primary/5 shadow-sm"
+          : "border-border hover:border-primary/40 hover:bg-muted/40"
+      )}
+    >
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <h4 className="font-medium text-sm">{title}</h4>
+        {selected && (
+          <span className="w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center shrink-0">
+            <Check className="w-3 h-3" />
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {meta}
+      </div>
+    </button>
+  );
+}
+
+function SourceEmpty({
+  title,
+  body,
+  href,
+  cta,
+}: {
+  title: string;
+  body: string;
+  href: string;
+  cta: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center border rounded-xl">
+      <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center mb-4">
+        <ClipboardCheck className="w-7 h-7 text-white" />
+      </div>
+      <h3 className="font-semibold mb-2">{title}</h3>
+      <p className="text-muted-foreground text-sm max-w-sm mb-6">{body}</p>
+      <Button asChild className="bg-gradient-to-r from-violet-600 to-indigo-600">
+        <Link href={href}>{cta}</Link>
+      </Button>
+    </div>
   );
 }

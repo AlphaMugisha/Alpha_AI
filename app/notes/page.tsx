@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSettings } from "@/hooks/useSettings";
@@ -23,6 +24,7 @@ import {
   X,
   Clock,
   File,
+  ClipboardCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +35,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 export default function NotesPage() {
+  const router = useRouter();
   const { aiConfig, hasApiKey } = useSettings();
   const { addSession } = useStudyData();
   const [notes, setNotes] = useState<Note[]>([]);
@@ -197,6 +200,13 @@ export default function NotesPage() {
                   </p>
                 </div>
                 <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-gradient-to-r from-violet-600 to-indigo-600"
+                    onClick={() => router.push(`/exam?lesson=${selectedNote.id}`)}
+                  >
+                    <ClipboardCheck className="w-4 h-4 mr-2" /> Make Exam
+                  </Button>
                   <Button size="sm" variant="outline" onClick={() => exportNote(selectedNote)}>
                     <Download className="w-4 h-4 mr-2" /> Export
                   </Button>
