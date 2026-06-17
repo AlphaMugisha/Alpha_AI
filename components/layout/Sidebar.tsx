@@ -31,18 +31,42 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/hooks/useAuth";
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/chat", icon: MessageCircle, label: "AI Chat" },
-  { href: "/notes", icon: FileText, label: "Notes Generator" },
-  { href: "/quiz", icon: Brain, label: "Quiz Generator" },
-  { href: "/exam", icon: ClipboardCheck, label: "Exam Mode" },
-  { href: "/flashcards", icon: Layers, label: "Flashcards" },
-  { href: "/explain", icon: Lightbulb, label: "Explain Topic" },
-  { href: "/planner", icon: Calendar, label: "Study Planner" },
-  { href: "/projects", icon: FolderKanban, label: "Projects" },
-  { href: "/repos", icon: Github, label: "My Repos" },
-  { href: "/settings", icon: Settings, label: "Settings" },
+const navSections: {
+  label: string | null;
+  items: { href: string; icon: typeof LayoutDashboard; label: string }[];
+}[] = [
+  {
+    label: null,
+    items: [{ href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" }],
+  },
+  {
+    label: "Learn",
+    items: [
+      { href: "/chat", icon: MessageCircle, label: "AI Chat" },
+      { href: "/notes", icon: FileText, label: "Notes Generator" },
+      { href: "/explain", icon: Lightbulb, label: "Explain Topic" },
+    ],
+  },
+  {
+    label: "Practice",
+    items: [
+      { href: "/quiz", icon: Brain, label: "Quiz Generator" },
+      { href: "/exam", icon: ClipboardCheck, label: "Exam Mode" },
+      { href: "/flashcards", icon: Layers, label: "Flashcards" },
+    ],
+  },
+  {
+    label: "Organize",
+    items: [
+      { href: "/planner", icon: Calendar, label: "Study Planner" },
+      { href: "/projects", icon: FolderKanban, label: "Projects" },
+      { href: "/repos", icon: Github, label: "My Repos" },
+    ],
+  },
+  {
+    label: null,
+    items: [{ href: "/settings", icon: Settings, label: "Settings" }],
+  },
 ];
 
 export function Sidebar() {
@@ -98,43 +122,58 @@ export function Sidebar() {
           </Button>
         </div>
 
-        <nav className="flex-1 p-2 space-y-1">
-          {navItems.map(({ href, icon: Icon, label }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
-            return (
-              <Tooltip key={href}>
-                <TooltipTrigger asChild>
-                  <Link href={href}>
-                    <motion.div
-                      whileHover={{ x: collapsed ? 0 : 2 }}
-                      whileTap={{ scale: 0.98 }}
-                      className={cn(
-                        "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
-                        active
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                        collapsed && "justify-center px-2"
+        <nav className="flex-1 overflow-y-auto p-2 space-y-1">
+          {navSections.map((section, si) => (
+            <div key={si} className={cn(si > 0 && "pt-3")}>
+              {section.label &&
+                (collapsed ? (
+                  <div className="mx-2 mb-1 border-t border-border/60" />
+                ) : (
+                  <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                    {section.label}
+                  </p>
+                ))}
+              <div className="space-y-1">
+                {section.items.map(({ href, icon: Icon, label }) => {
+                  const active =
+                    pathname === href || pathname.startsWith(href + "/");
+                  return (
+                    <Tooltip key={href}>
+                      <TooltipTrigger asChild>
+                        <Link href={href}>
+                          <motion.div
+                            whileHover={{ x: collapsed ? 0 : 2 }}
+                            whileTap={{ scale: 0.98 }}
+                            className={cn(
+                              "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                              active
+                                ? "bg-primary text-primary-foreground"
+                                : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                              collapsed && "justify-center px-2"
+                            )}
+                          >
+                            <Icon className="h-4 w-4 shrink-0" />
+                            {!collapsed && (
+                              <motion.span
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="truncate"
+                              >
+                                {label}
+                              </motion.span>
+                            )}
+                          </motion.div>
+                        </Link>
+                      </TooltipTrigger>
+                      {collapsed && (
+                        <TooltipContent side="right">{label}</TooltipContent>
                       )}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && (
-                        <motion.span
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="truncate"
-                        >
-                          {label}
-                        </motion.span>
-                      )}
-                    </motion.div>
-                  </Link>
-                </TooltipTrigger>
-                {collapsed && (
-                  <TooltipContent side="right">{label}</TooltipContent>
-                )}
-              </Tooltip>
-            );
-          })}
+                    </Tooltip>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
 
         {user && (
