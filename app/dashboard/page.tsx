@@ -12,6 +12,7 @@ import {
   Lightbulb,
   Calendar,
   FolderKanban,
+  ClipboardCheck,
   ArrowRight,
   BookOpen,
   Trophy,
@@ -52,6 +53,13 @@ const quickActions = [
     label: "Create Quiz",
     desc: "Test your knowledge",
     color: "from-orange-500 to-red-500",
+  },
+  {
+    href: "/exam",
+    icon: ClipboardCheck,
+    label: "Exam Mode",
+    desc: "Timed test conditions",
+    color: "from-rose-500 to-pink-600",
   },
   {
     href: "/flashcards",

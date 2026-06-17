@@ -15,6 +15,7 @@ import {
   Github,
   Settings,
   GraduationCap,
+  ClipboardCheck,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/chat", icon: MessageCircle, label: "AI Chat" },
   { href: "/notes", icon: FileText, label: "Notes Generator" },
   { href: "/quiz", icon: Brain, label: "Quiz Generator" },
+  { href: "/exam", icon: ClipboardCheck, label: "Exam Mode" },
   { href: "/flashcards", icon: Layers, label: "Flashcards" },
   { href: "/explain", icon: Lightbulb, label: "Explain Topic" },
   { href: "/planner", icon: Calendar, label: "Study Planner" },

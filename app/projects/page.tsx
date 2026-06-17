@@ -22,6 +22,7 @@ import {
   ListChecks,
   X,
   CircleDashed,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -122,6 +123,7 @@ export default function ProjectsPage() {
   const [projects, setProjects] = useState<CodingProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<"all" | ProjectStatus>("all");
+  const [search, setSearch] = useState("");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -151,8 +153,17 @@ export default function ProjectsPage() {
     [projects, detailId]
   );
 
-  const filtered =
-    filter === "all" ? projects : projects.filter((p) => p.status === filter);
+  const filtered = useMemo(() => {
+    const byStatus =
+      filter === "all" ? projects : projects.filter((p) => p.status === filter);
+    const q = search.trim().toLowerCase();
+    if (!q) return byStatus;
+    return byStatus.filter((p) =>
+      [p.name, p.description, ...p.techStack]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(q))
+    );
+  }, [projects, filter, search]);
 
   const stats = useMemo(
     () => ({
@@ -258,11 +269,27 @@ export default function ProjectsPage() {
   };
 
   // ----- tasks -----
+  // Keep a project's progress % in sync with its task completion ratio.
+  // Only auto-updates when tasks exist — projects without tasks keep the
+  // progress set manually via the slider.
+  const syncProgressFromTasks = async (
+    project: CodingProject,
+    tasks: { done: boolean }[]
+  ) => {
+    if (tasks.length === 0) return;
+    const done = tasks.filter((t) => t.done).length;
+    const progress = Math.round((done / tasks.length) * 100);
+    if (progress !== project.progress) {
+      await projectDb.save({ ...project, progress });
+    }
+  };
+
   const addTask = async () => {
     if (!detail || !newTaskTitle.trim()) return;
     try {
-      await projectTaskDb.add(detail.id, newTaskTitle.trim());
+      const created = await projectTaskDb.add(detail.id, newTaskTitle.trim());
       setNewTaskTitle("");
+      await syncProgressFromTasks(detail, [...detail.tasks, created]);
       await refresh();
     } catch {
       toast.error("Failed to add task.");
@@ -270,8 +297,13 @@ export default function ProjectsPage() {
   };
 
   const toggleTask = async (taskId: string, done: boolean) => {
+    if (!detail) return;
     try {
       await projectTaskDb.toggle(taskId, done);
+      const updatedTasks = detail.tasks.map((t) =>
+        t.id === taskId ? { ...t, done } : t
+      );
+      await syncProgressFromTasks(detail, updatedTasks);
       await refresh();
     } catch {
       toast.error("Failed to update task.");
@@ -279,8 +311,13 @@ export default function ProjectsPage() {
   };
 
   const deleteTask = async (taskId: string) => {
+    if (!detail) return;
     try {
       await projectTaskDb.delete(taskId);
+      await syncProgressFromTasks(
+        detail,
+        detail.tasks.filter((t) => t.id !== taskId)
+      );
       await refresh();
     } catch {
       toast.error("Failed to delete task.");
@@ -339,25 +376,45 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* Filter tabs */}
+      {/* Search + filter tabs */}
       {projects.length > 0 && (
-        <Tabs
-          value={filter}
-          onValueChange={(v) => setFilter(v as "all" | ProjectStatus)}
-          className="mb-6"
-        >
-          <TabsList>
-            <TabsTrigger value="all">All ({projects.length})</TabsTrigger>
-            {STATUS_ORDER.map((s) => {
-              const count = projects.filter((p) => p.status === s).length;
-              return (
-                <TabsTrigger key={s} value={s}>
-                  {STATUS_META[s].label} ({count})
-                </TabsTrigger>
-              );
-            })}
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-col-reverse gap-4 md:flex-row md:items-center md:justify-between mb-6">
+          <Tabs
+            value={filter}
+            onValueChange={(v) => setFilter(v as "all" | ProjectStatus)}
+          >
+            <TabsList>
+              <TabsTrigger value="all">All ({projects.length})</TabsTrigger>
+              {STATUS_ORDER.map((s) => {
+                const count = projects.filter((p) => p.status === s).length;
+                return (
+                  <TabsTrigger key={s} value={s}>
+                    {STATUS_META[s].label} ({count})
+                  </TabsTrigger>
+                );
+              })}
+            </TabsList>
+          </Tabs>
+
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search name, description, tech…"
+              className="pl-9 pr-9"
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                aria-label="Clear search"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-muted-foreground hover:text-foreground"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Content */}
@@ -382,11 +439,31 @@ export default function ProjectsPage() {
             <Plus className="w-4 h-4 mr-2" /> Add Your First Project
           </Button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Search className="w-10 h-10 text-muted-foreground/40 mb-3" />
+          <h3 className="font-semibold mb-1">No matching projects</h3>
+          <p className="text-muted-foreground text-sm max-w-sm">
+            {search.trim()
+              ? `Nothing matches “${search.trim()}”. Try a different search or filter.`
+              : "No projects in this category yet."}
+          </p>
+          {search && (
+            <Button variant="outline" className="mt-4" onClick={() => setSearch("")}>
+              Clear search
+            </Button>
+          )}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
           <AnimatePresence mode="popLayout">
             {filtered.map((p) => {
               const { done, total } = taskRatio(p);
+              // Derive progress from task completion when tasks exist, so the
+              // bar is always accurate even for tasks toggled before progress
+              // sync existed. Projects without tasks use the manual value.
+              const progress =
+                total > 0 ? Math.round((done / total) * 100) : p.progress;
               return (
                 <motion.div
                   key={p.id}
@@ -468,9 +545,9 @@ export default function ProjectsPage() {
                         <div>
                           <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
                             <span>Progress</span>
-                            <span>{p.progress}%</span>
+                            <span>{progress}%</span>
                           </div>
-                          <Progress value={p.progress} className="h-2" />
+                          <Progress value={progress} className="h-2" />
                         </div>
 
                         <div className="flex items-center justify-between text-xs text-muted-foreground">

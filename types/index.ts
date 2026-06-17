@@ -46,6 +46,20 @@ export interface QuizResult {
   completedAt: Date;
 }
 
+export interface ExamConfig {
+  durationMinutes: number;
+  passMark: number; // percentage, 0-100
+}
+
+export interface ExamSummary {
+  score: number;
+  totalQuestions: number;
+  percentage: number;
+  passed: boolean;
+  passMark: number;
+  timeTakenSeconds: number;
+}
+
 export interface Flashcard {
   id: string;
   front: string;
