@@ -18,8 +18,15 @@ export interface Note {
   title: string;
   content: string;
   sourceFile?: string;
+  courseId?: string;
   createdAt: Date;
   tags: string[];
+}
+
+export interface Course {
+  id: string;
+  name: string;
+  createdAt: Date;
 }
 
 export interface QuizQuestion {
@@ -58,6 +65,39 @@ export interface ExamSummary {
   passed: boolean;
   passMark: number;
   timeTakenSeconds: number;
+}
+
+// ----- Structured (mixed-format) exams -----
+export type ExamStrictness = "lenient" | "balanced" | "strict";
+export type ExamSection = "A" | "B";
+export type ExamQuestionType = "mcq" | "truefalse" | "short";
+
+export interface ExamQuestion {
+  id: string;
+  section: ExamSection;
+  type: ExamQuestionType;
+  marks: number;
+  question: string;
+  options?: string[]; // mcq only
+  correctAnswer?: number; // mcq: index of correct option
+  correctBool?: boolean; // truefalse: the correct value
+  modelAnswer?: string; // short: reference answer for AI grading
+  explanation?: string;
+}
+
+export interface StructuredExam {
+  title: string;
+  questions: ExamQuestion[];
+}
+
+// A user's answer to one question: option index (mcq), boolean (truefalse),
+// or free text (short). null = unanswered.
+export type ExamAnswer = number | boolean | string | null;
+
+export interface ExamGrade {
+  awarded: number;
+  max: number;
+  feedback?: string;
 }
 
 export interface Flashcard {

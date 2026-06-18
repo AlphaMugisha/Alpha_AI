@@ -5,10 +5,20 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useStudyData } from "@/hooks/useStudyData";
 import { useSettings } from "@/hooks/useSettings";
-import { quizDb, notesDb } from "@/lib/db";
-import { generateQuiz } from "@/lib/ai";
-import { generateId, formatDate, cn } from "@/lib/utils";
-import { Quiz, QuizQuestion, Note, ExamSummary } from "@/types";
+import { quizDb, notesDb, coursesDb } from "@/lib/db";
+import { generateExam, gradeShortAnswers, reviewAnswer } from "@/lib/exam";
+import { formatDate, cn } from "@/lib/utils";
+import {
+  Quiz,
+  Note,
+  Course,
+  ExamQuestion,
+  ExamAnswer,
+  ExamGrade,
+  ExamStrictness,
+  StructuredExam,
+  ExamSummary,
+} from "@/types";
 import { toast } from "sonner";
 import {
   ClipboardCheck,
@@ -26,12 +36,15 @@ import {
   ListChecks,
   FileText,
   Sparkles,
+  GraduationCap,
+  Scale,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -51,15 +64,38 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import Link from "next/link";
 
 type Phase = "setup" | "taking" | "results";
-type Source = "quiz" | "lesson";
+type Source = "course" | "quiz";
 
-const DURATION_OPTIONS = ["5", "10", "15", "20", "30", "45", "60"];
-const QUESTION_OPTIONS = ["5", "10", "15", "20"];
+const DURATION_OPTIONS = ["10", "15", "20", "30", "45", "60", "90"];
+const ALL_LESSONS = "__all__";
 
 function formatClock(totalSeconds: number) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+}
+
+function isAnswered(a: ExamAnswer): boolean {
+  if (a === null || a === undefined) return false;
+  if (typeof a === "string") return a.trim().length > 0;
+  return true;
+}
+
+// Saved MCQ quizzes are folded into the structured model (Section A, 1 mark each).
+function quizToExam(quiz: Quiz): StructuredExam {
+  return {
+    title: quiz.title,
+    questions: quiz.questions.map((q, i) => ({
+      id: q.id || `q_${i}`,
+      section: "A",
+      type: "mcq",
+      marks: 1,
+      question: q.question,
+      options: q.options,
+      correctAnswer: q.correctAnswer,
+      explanation: q.explanation,
+    })),
+  };
 }
 
 export default function ExamPage() {
@@ -68,31 +104,40 @@ export default function ExamPage() {
 
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [phase, setPhase] = useState<Phase>("setup");
-  const [source, setSource] = useState<Source>("quiz");
+  const [source, setSource] = useState<Source>("course");
+  const [courseId, setCourseId] = useState<string>("");
+  const [lessonId, setLessonId] = useState<string>(ALL_LESSONS);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
-  const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
-  const [numQuestions, setNumQuestions] = useState("10");
-  const [duration, setDuration] = useState("15");
+  const [duration, setDuration] = useState("30");
   const [passMark, setPassMark] = useState(50);
+  const [strictness, setStrictness] = useState<ExamStrictness>("balanced");
   const [building, setBuilding] = useState(false);
 
-  const [activeQuiz, setActiveQuiz] = useState<Quiz | null>(null);
-  const [answers, setAnswers] = useState<(number | null)[]>([]);
+  const [activeExam, setActiveExam] = useState<StructuredExam | null>(null);
+  // Set only when the exam came from a real saved quiz (for result persistence).
+  const [activeQuizId, setActiveQuizId] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<ExamAnswer[]>([]);
   const [flagged, setFlagged] = useState<boolean[]>([]);
   const [currentQ, setCurrentQ] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
   const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [grading, setGrading] = useState(false);
+  const [grades, setGrades] = useState<ExamGrade[]>([]);
   const [summary, setSummary] = useState<ExamSummary | null>(null);
+  const [claimingIndex, setClaimingIndex] = useState<number | null>(null);
+  const [claimed, setClaimed] = useState<Set<number>>(new Set());
 
-  // ----- load saved quizzes + lessons (notes) -----
+  // ----- load library -----
   useEffect(() => {
-    Promise.all([quizDb.getAll(), notesDb.getAll()])
-      .then(([qs, ns]) => {
+    Promise.all([quizDb.getAll(), notesDb.getAll(), coursesDb.getAll()])
+      .then(([qs, ns, cs]) => {
         setQuizzes(qs);
         setNotes(ns);
+        setCourses(cs);
       })
       .catch(() => toast.error("Could not load your library."))
       .finally(() => setLoading(false));
@@ -100,77 +145,177 @@ export default function ExamPage() {
 
   // ----- deep link from Notes: /exam?lesson=<id> -----
   useEffect(() => {
-    const lessonId = new URLSearchParams(window.location.search).get("lesson");
-    if (lessonId) {
-      setSource("lesson");
-      setSelectedNoteId(lessonId);
+    if (notes.length === 0) return;
+    const lid = new URLSearchParams(window.location.search).get("lesson");
+    if (lid) {
+      const note = notes.find((n) => n.id === lid);
+      setSource("course");
+      if (note?.courseId) setCourseId(note.courseId);
+      setLessonId(lid);
     }
-  }, []);
+  }, [notes]);
 
   const totalSeconds = useMemo(() => parseInt(duration) * 60, [duration]);
+  const courseNotes = useMemo(
+    () => notes.filter((n) => n.courseId === courseId),
+    [notes, courseId]
+  );
 
   // ----- submit / grade -----
   const submitExam = useCallback(
-    (auto = false) => {
-      if (!activeQuiz) return;
-      const score = answers.reduce<number>(
-        (acc, ans, i) =>
-          acc + (ans === activeQuiz.questions[i].correctAnswer ? 1 : 0),
-        0
-      );
-      const total = activeQuiz.questions.length;
-      const percentage = Math.round((score / total) * 100);
+    async (auto = false) => {
+      if (!activeExam) return;
+      setConfirmSubmit(false);
+      setGrading(true);
 
+      const qs = activeExam.questions;
+      const result: ExamGrade[] = qs.map((q, i) => {
+        if (q.type === "mcq") {
+          return { awarded: answers[i] === q.correctAnswer ? q.marks : 0, max: q.marks };
+        }
+        if (q.type === "truefalse") {
+          return { awarded: answers[i] === q.correctBool ? q.marks : 0, max: q.marks };
+        }
+        return { awarded: 0, max: q.marks }; // short — filled by AI below
+      });
+
+      // AI-grade the written (Section B) answers.
+      const shortItems = qs
+        .map((q, i) => ({ q, i }))
+        .filter(({ q }) => q.type === "short");
+      if (shortItems.length > 0) {
+        try {
+          const graded = await gradeShortAnswers(
+            aiConfig,
+            shortItems.map(({ q, i }) => ({
+              question: q.question,
+              modelAnswer: q.modelAnswer,
+              marks: q.marks,
+              answer: typeof answers[i] === "string" ? (answers[i] as string) : "",
+            })),
+            strictness
+          );
+          shortItems.forEach(({ i }, k) => {
+            result[i] = {
+              awarded: graded[k].awarded,
+              max: qs[i].marks,
+              feedback: graded[k].feedback,
+            };
+          });
+        } catch {
+          toast.error("Couldn't auto-grade written answers; they scored 0.");
+        }
+      }
+
+      const totalMarks = qs.reduce((s, q) => s + q.marks, 0);
+      const awarded = result.reduce((s, g) => s + g.awarded, 0);
+      const percentage = Math.round((awarded / totalMarks) * 100);
+
+      setGrades(result);
       setSummary({
-        score,
-        totalQuestions: total,
+        score: Math.round(awarded * 10) / 10,
+        totalQuestions: totalMarks, // marks-based total
         percentage,
         passed: percentage >= passMark,
         passMark,
         timeTakenSeconds: totalSeconds - timeLeft,
       });
 
-      quizDb
-        .saveResult({
-          quizId: activeQuiz.id,
-          score,
-          totalQuestions: total,
-          answers: answers.map((a) => a ?? -1),
-          completedAt: new Date(),
-        })
-        .catch(() => {});
-      addSession("quiz", `Exam: ${activeQuiz.title}`);
+      // Persist only saved-quiz exams — quiz_results.quiz_id requires a real quiz.
+      if (activeQuizId) {
+        const correctCount = result.filter((g) => g.awarded === g.max).length;
+        quizDb
+          .saveResult({
+            quizId: activeQuizId,
+            score: correctCount,
+            totalQuestions: qs.length,
+            answers: [],
+            completedAt: new Date(),
+          })
+          .catch(() => {});
+      }
+      addSession("quiz", `Exam: ${activeExam.title}`);
 
-      setConfirmSubmit(false);
+      setGrading(false);
       setPhase("results");
       if (auto) toast.info("Time's up — exam submitted automatically.");
     },
-    [activeQuiz, answers, passMark, totalSeconds, timeLeft, addSession]
+    [activeExam, activeQuizId, answers, aiConfig, passMark, strictness, totalSeconds, timeLeft, addSession]
   );
 
   // ----- countdown timer -----
   useEffect(() => {
     if (phase !== "taking") return;
-    const id = setInterval(() => {
-      setTimeLeft((t) => Math.max(0, t - 1));
-    }, 1000);
+    const id = setInterval(() => setTimeLeft((t) => Math.max(0, t - 1)), 1000);
     return () => clearInterval(id);
   }, [phase]);
 
-  // auto-submit when the clock hits zero
   useEffect(() => {
     if (phase === "taking" && timeLeft === 0) submitExam(true);
   }, [phase, timeLeft, submitExam]);
 
   // ----- start -----
-  const beginExam = (quiz: Quiz) => {
-    setActiveQuiz(quiz);
-    setAnswers(new Array(quiz.questions.length).fill(null));
-    setFlagged(new Array(quiz.questions.length).fill(false));
+  const beginExam = (exam: StructuredExam) => {
+    setActiveExam(exam);
+    setAnswers(new Array(exam.questions.length).fill(null));
+    setFlagged(new Array(exam.questions.length).fill(false));
     setCurrentQ(0);
     setTimeLeft(parseInt(duration) * 60);
+    setGrades([]);
     setSummary(null);
+    setClaimed(new Set());
+    setClaimingIndex(null);
     setPhase("taking");
+  };
+
+  // Re-grade a single written answer when the student claims (appeals).
+  const claimQuestion = async (i: number) => {
+    if (!activeExam) return;
+    const q = activeExam.questions[i];
+    if (q.type !== "short") return;
+    setClaimingIndex(i);
+    try {
+      const prev = grades[i]?.awarded ?? 0;
+      const res = await reviewAnswer(
+        aiConfig,
+        {
+          question: q.question,
+          modelAnswer: q.modelAnswer,
+          marks: q.marks,
+          answer: typeof answers[i] === "string" ? (answers[i] as string) : "",
+          previous: prev,
+        },
+        strictness
+      );
+      const newGrades = grades.map((g, k) =>
+        k === i ? { awarded: res.awarded, max: q.marks, feedback: res.feedback } : g
+      );
+      setGrades(newGrades);
+      setClaimed((s) => new Set(s).add(i));
+
+      // Recompute the overall result.
+      const totalMarks = activeExam.questions.reduce((s, qq) => s + qq.marks, 0);
+      const awarded = newGrades.reduce((s, g) => s + g.awarded, 0);
+      const percentage = Math.round((awarded / totalMarks) * 100);
+      setSummary((s) =>
+        s
+          ? {
+              ...s,
+              score: Math.round(awarded * 10) / 10,
+              percentage,
+              passed: percentage >= s.passMark,
+            }
+          : s
+      );
+
+      if (res.awarded > prev) toast.success(`Mark raised: ${prev} → ${res.awarded}`);
+      else if (res.awarded < prev) toast.info(`Mark lowered: ${prev} → ${res.awarded}`);
+      else toast.info("Mark unchanged after review.");
+    } catch {
+      toast.error("Couldn't review this answer. Try again.");
+    } finally {
+      setClaimingIndex(null);
+    }
   };
 
   const startExam = async () => {
@@ -180,40 +325,46 @@ export default function ExamPage() {
         toast.error("Pick a quiz to take as an exam.");
         return;
       }
-      beginExam(quiz);
+      setActiveQuizId(quiz.id);
+      beginExam(quizToExam(quiz));
       return;
     }
+    setActiveQuizId(null);
 
-    // Lesson → summarize what was learned into a fresh quiz.
-    const note = notes.find((n) => n.id === selectedNoteId);
-    if (!note) {
-      toast.error("Pick a lesson to be examined on.");
+    // Course → aggregate lesson content and simulate a full exam.
+    if (!courseId) {
+      toast.error("Pick a course first.");
       return;
     }
     if (!hasApiKey) {
-      toast.error("Add your Gemini API key in Settings to build a lesson exam.");
+      toast.error("Add your Gemini API key in Settings to simulate an exam.");
       return;
     }
+    const sourceNotes =
+      lessonId === ALL_LESSONS
+        ? courseNotes
+        : courseNotes.filter((n) => n.id === lessonId);
+    if (sourceNotes.length === 0) {
+      toast.error("This course has no lessons yet. Upload notes for it first.");
+      return;
+    }
+
+    const course = courses.find((c) => c.id === courseId);
+    const content = sourceNotes
+      .map((n) => `# ${n.title}\n${n.content}`)
+      .join("\n\n---\n\n");
+
     setBuilding(true);
     try {
-      const questions = await generateQuiz(
-        aiConfig,
-        note.content,
-        parseInt(numQuestions)
-      );
-      const quiz: Quiz = {
-        id: generateId(),
-        title: note.title,
+      const questions = await generateExam(aiConfig, content, course?.name);
+      beginExam({
+        title: course?.name ? `${course.name} — Exam` : "Simulated Exam",
         questions,
-        sourceContent: note.content.slice(0, 500),
-        createdAt: new Date(),
-      };
-      await quizDb.save(quiz).catch(() => {});
-      beginExam(quiz);
-      toast.success(`Built a ${questions.length}-question exam from your lesson.`);
+      });
+      toast.success("Exam paper ready. Good luck!");
     } catch (err) {
       toast.error(
-        err instanceof Error ? err.message : "Failed to build exam from lesson."
+        err instanceof Error ? err.message : "Failed to simulate the exam."
       );
     } finally {
       setBuilding(false);
@@ -222,17 +373,18 @@ export default function ExamPage() {
 
   const restart = () => {
     setPhase("setup");
-    setActiveQuiz(null);
+    setActiveExam(null);
     setAnswers([]);
     setFlagged([]);
     setCurrentQ(0);
+    setGrades([]);
     setSummary(null);
   };
 
-  const chooseAnswer = (optionIndex: number) => {
+  const setAnswer = (value: ExamAnswer) => {
     setAnswers((prev) => {
       const next = [...prev];
-      next[currentQ] = next[currentQ] === optionIndex ? null : optionIndex;
+      next[currentQ] = value;
       return next;
     });
   };
@@ -245,13 +397,14 @@ export default function ExamPage() {
     });
   };
 
-  const answeredCount = answers.filter((a) => a !== null).length;
+  const answeredCount = answers.filter(isAnswered).length;
 
   // ============================ TAKING ============================
-  if (phase === "taking" && activeQuiz) {
-    const q: QuizQuestion = activeQuiz.questions[currentQ];
-    const total = activeQuiz.questions.length;
+  if (phase === "taking" && activeExam) {
+    const q: ExamQuestion = activeExam.questions[currentQ];
+    const total = activeExam.questions.length;
     const lowTime = timeLeft <= 30;
+    const ans = answers[currentQ];
 
     return (
       <DashboardLayout>
@@ -259,7 +412,7 @@ export default function ExamPage() {
           {/* Exam bar */}
           <div className="flex items-center justify-between gap-4 mb-6 p-4 rounded-2xl border bg-card/80 backdrop-blur-sm">
             <div className="min-w-0">
-              <h2 className="font-semibold truncate">{activeQuiz.title}</h2>
+              <h2 className="font-semibold truncate">{activeExam.title}</h2>
               <p className="text-xs text-muted-foreground">
                 {answeredCount}/{total} answered
               </p>
@@ -299,12 +452,27 @@ export default function ExamPage() {
                 >
                   <Card>
                     <CardHeader className="flex flex-row items-start justify-between gap-3">
-                      <CardTitle className="text-lg font-medium">
-                        <span className="text-muted-foreground mr-2">
-                          {currentQ + 1}.
-                        </span>
-                        {q.question}
-                      </CardTitle>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1.5 text-xs">
+                          <span className="px-2 py-0.5 rounded-full bg-muted font-medium">
+                            Section {q.section}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {q.marks} {q.marks === 1 ? "mark" : "marks"} ·{" "}
+                            {q.type === "mcq"
+                              ? "Multiple choice"
+                              : q.type === "truefalse"
+                                ? "True / False"
+                                : "Written answer"}
+                          </span>
+                        </div>
+                        <CardTitle className="text-lg font-medium">
+                          <span className="text-muted-foreground mr-2">
+                            {currentQ + 1}.
+                          </span>
+                          {q.question}
+                        </CardTitle>
+                      </div>
                       <button
                         onClick={toggleFlag}
                         className={cn(
@@ -324,35 +492,64 @@ export default function ExamPage() {
                       </button>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      {q.options.map((option, i) => {
-                        const chosen = answers[currentQ] === i;
-                        return (
-                          <button
-                            key={i}
-                            onClick={() => chooseAnswer(i)}
-                            className={cn(
-                              "w-full text-left p-4 rounded-xl border-2 transition-all text-sm",
-                              chosen
-                                ? "border-primary bg-primary/5"
-                                : "border-border hover:border-primary/50 hover:bg-muted/50"
-                            )}
-                          >
-                            <div className="flex items-center gap-3">
-                              <div
-                                className={cn(
-                                  "w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0",
-                                  chosen
-                                    ? "border-primary bg-primary text-primary-foreground"
-                                    : "border-muted-foreground/30"
-                                )}
-                              >
-                                {String.fromCharCode(65 + i)}
+                      {q.type === "mcq" &&
+                        (q.options ?? []).map((option, i) => {
+                          const chosen = ans === i;
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => setAnswer(chosen ? null : i)}
+                              className={cn(
+                                "w-full text-left p-4 rounded-xl border-2 transition-all text-sm",
+                                chosen
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border hover:border-primary/50 hover:bg-muted/50"
+                              )}
+                            >
+                              <div className="flex items-center gap-3">
+                                <div
+                                  className={cn(
+                                    "w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs font-bold shrink-0",
+                                    chosen
+                                      ? "border-primary bg-primary text-primary-foreground"
+                                      : "border-muted-foreground/30"
+                                  )}
+                                >
+                                  {String.fromCharCode(65 + i)}
+                                </div>
+                                {option}
                               </div>
-                              {option}
-                            </div>
-                          </button>
-                        );
-                      })}
+                            </button>
+                          );
+                        })}
+
+                      {q.type === "truefalse" &&
+                        [true, false].map((val) => {
+                          const chosen = ans === val;
+                          return (
+                            <button
+                              key={String(val)}
+                              onClick={() => setAnswer(chosen ? null : val)}
+                              className={cn(
+                                "w-full text-left p-4 rounded-xl border-2 transition-all text-sm font-medium",
+                                chosen
+                                  ? "border-primary bg-primary/5"
+                                  : "border-border hover:border-primary/50 hover:bg-muted/50"
+                              )}
+                            >
+                              {val ? "True" : "False"}
+                            </button>
+                          );
+                        })}
+
+                      {q.type === "short" && (
+                        <Textarea
+                          placeholder="Type your answer here…"
+                          value={typeof ans === "string" ? ans : ""}
+                          onChange={(e) => setAnswer(e.target.value)}
+                          className="min-h-[160px] font-mono text-sm"
+                        />
+                      )}
                     </CardContent>
                   </Card>
                 </motion.div>
@@ -384,10 +581,9 @@ export default function ExamPage() {
                     <ListChecks className="w-3.5 h-3.5" /> Questions
                   </h3>
                   <div className="grid grid-cols-5 gap-2">
-                    {activeQuiz.questions.map((_, i) => {
+                    {activeExam.questions.map((_, i) => {
                       const isCurrent = i === currentQ;
-                      const isAnswered = answers[i] !== null;
-                      const isFlagged = flagged[i];
+                      const done = isAnswered(answers[i]);
                       return (
                         <button
                           key={i}
@@ -395,13 +591,13 @@ export default function ExamPage() {
                           className={cn(
                             "relative aspect-square rounded-lg text-xs font-semibold flex items-center justify-center border-2 transition-all",
                             isCurrent && "ring-2 ring-primary ring-offset-1",
-                            isAnswered
+                            done
                               ? "bg-primary text-primary-foreground border-primary"
                               : "bg-muted/50 border-border text-muted-foreground hover:border-primary/50"
                           )}
                         >
                           {i + 1}
-                          {isFlagged && (
+                          {flagged[i] && (
                             <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 border border-background" />
                           )}
                         </button>
@@ -435,11 +631,11 @@ export default function ExamPage() {
             <p className="text-sm text-muted-foreground">
               You&apos;ve answered{" "}
               <span className="font-semibold text-foreground">
-                {answeredCount} of {activeQuiz.questions.length}
+                {answeredCount} of {activeExam.questions.length}
               </span>{" "}
               questions.
-              {answeredCount < activeQuiz.questions.length &&
-                " Unanswered questions will be marked incorrect."}
+              {answeredCount < activeExam.questions.length &&
+                " Unanswered questions score zero."}
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmSubmit(false)}>
@@ -454,12 +650,25 @@ export default function ExamPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Grading overlay */}
+        {grading && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
+              <p className="font-medium">Grading your exam…</p>
+              <p className="text-sm text-muted-foreground">
+                Marking written answers with AI.
+              </p>
+            </div>
+          </div>
+        )}
       </DashboardLayout>
     );
   }
 
   // ============================ RESULTS ============================
-  if (phase === "results" && activeQuiz && summary) {
+  if (phase === "results" && activeExam && summary) {
     return (
       <DashboardLayout>
         <div className="max-w-2xl mx-auto space-y-6">
@@ -482,21 +691,21 @@ export default function ExamPage() {
                 {summary.passed ? "Passed! 🎉" : "Did not pass 💪"}
               </h2>
               <p className="text-muted-foreground mb-6">
-                {summary.score} of {summary.totalQuestions} correct · pass mark{" "}
+                {summary.score} / {summary.totalQuestions} marks · pass mark{" "}
                 {summary.passMark}%
               </p>
               <div className="grid grid-cols-3 gap-4 mb-8">
                 <div className="p-3 bg-muted rounded-xl">
-                  <div className="text-2xl font-bold text-green-500">
+                  <div className="text-2xl font-bold text-primary">
                     {summary.score}
                   </div>
-                  <div className="text-xs text-muted-foreground">Correct</div>
+                  <div className="text-xs text-muted-foreground">Marks</div>
                 </div>
                 <div className="p-3 bg-muted rounded-xl">
-                  <div className="text-2xl font-bold text-red-500">
-                    {summary.totalQuestions - summary.score}
+                  <div className="text-2xl font-bold">
+                    {summary.totalQuestions}
                   </div>
-                  <div className="text-xs text-muted-foreground">Incorrect</div>
+                  <div className="text-xs text-muted-foreground">Out of</div>
                 </div>
                 <div className="p-3 bg-muted rounded-xl">
                   <div className="text-2xl font-bold text-primary">
@@ -506,7 +715,7 @@ export default function ExamPage() {
                 </div>
               </div>
               <div className="flex gap-3 justify-center">
-                <Button variant="outline" onClick={() => beginExam(activeQuiz)}>
+                <Button variant="outline" onClick={() => beginExam(activeExam)}>
                   <RotateCcw className="w-4 h-4 mr-2" /> Retake
                 </Button>
                 <Button
@@ -519,51 +728,137 @@ export default function ExamPage() {
             </Card>
           </motion.div>
 
-          {/* Review */}
+          {/* Per-question review */}
           <div className="space-y-3">
-            <h3 className="font-semibold">Review Answers</h3>
-            {activeQuiz.questions.map((q, i) => {
+            <h3 className="font-semibold">Review &amp; Feedback</h3>
+            {activeExam.questions.map((q, i) => {
+              const g = grades[i];
               const userAns = answers[i];
-              const correct = userAns === q.correctAnswer;
+              const full = g && g.awarded === g.max;
+              const partial = g && g.awarded > 0 && g.awarded < g.max;
               return (
                 <Card
                   key={q.id}
                   className={cn(
                     "border-2",
-                    correct
+                    full
                       ? "border-green-200 dark:border-green-800"
-                      : "border-red-200 dark:border-red-800"
+                      : partial
+                        ? "border-amber-200 dark:border-amber-800"
+                        : "border-red-200 dark:border-red-800"
                   )}
                 >
                   <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      {correct ? (
-                        <Check className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
-                      ) : (
-                        <X className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />
-                      )}
-                      <div>
-                        <p className="font-medium text-sm mb-2">
-                          {i + 1}. {q.question}
-                        </p>
-                        <p className="text-xs text-green-600 dark:text-green-400">
-                          Correct: {q.options[q.correctAnswer]}
-                        </p>
-                        {userAns === null ? (
-                          <p className="text-xs text-amber-600 dark:text-amber-400">
-                            Not answered
-                          </p>
-                        ) : (
-                          !correct && (
-                            <p className="text-xs text-red-600 dark:text-red-400">
-                              Your answer: {q.options[userAns]}
-                            </p>
-                          )
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <p className="font-medium text-sm">
+                        <span className="text-muted-foreground">
+                          {i + 1}. [Section {q.section}]{" "}
+                        </span>
+                        {q.question}
+                      </p>
+                      <span
+                        className={cn(
+                          "shrink-0 text-xs font-bold px-2 py-1 rounded-lg",
+                          full
+                            ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400"
+                            : partial
+                              ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                              : "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400"
                         )}
-                        <p className="text-xs text-muted-foreground mt-1">
+                      >
+                        {g ? `${g.awarded}/${g.max}` : `0/${q.marks}`}
+                      </span>
+                    </div>
+
+                    {/* Your answer */}
+                    <div className="text-xs space-y-1">
+                      {q.type === "mcq" && (
+                        <>
+                          <p className="text-green-600 dark:text-green-400">
+                            Correct:{" "}
+                            {q.options?.[q.correctAnswer ?? -1] ?? "—"}
+                          </p>
+                          <p className="text-muted-foreground">
+                            Your answer:{" "}
+                            {typeof userAns === "number"
+                              ? q.options?.[userAns]
+                              : "Not answered"}
+                          </p>
+                        </>
+                      )}
+                      {q.type === "truefalse" && (
+                        <>
+                          <p className="text-green-600 dark:text-green-400">
+                            Correct: {q.correctBool ? "True" : "False"}
+                          </p>
+                          <p className="text-muted-foreground">
+                            Your answer:{" "}
+                            {typeof userAns === "boolean"
+                              ? userAns
+                                ? "True"
+                                : "False"
+                              : "Not answered"}
+                          </p>
+                        </>
+                      )}
+                      {q.type === "short" && (
+                        <>
+                          <p className="text-muted-foreground whitespace-pre-wrap">
+                            <span className="font-medium text-foreground">
+                              Your answer:{" "}
+                            </span>
+                            {typeof userAns === "string" && userAns.trim()
+                              ? userAns
+                              : "Not answered"}
+                          </p>
+                          {g?.feedback && (
+                            <p className="text-violet-600 dark:text-violet-400">
+                              <span className="font-medium">Feedback: </span>
+                              {g.feedback}
+                            </p>
+                          )}
+                          {q.modelAnswer && (
+                            <details className="mt-1">
+                              <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                                Model answer
+                              </summary>
+                              <p className="mt-1 whitespace-pre-wrap text-muted-foreground">
+                                {q.modelAnswer}
+                              </p>
+                            </details>
+                          )}
+                          <div className="pt-1.5">
+                            {claimed.has(i) ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                                <Check className="w-3 h-3" /> Reviewed
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => claimQuestion(i)}
+                                disabled={claimingIndex !== null}
+                                className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                              >
+                                {claimingIndex === i ? (
+                                  <>
+                                    <Loader2 className="w-3 h-3 animate-spin" />{" "}
+                                    Reviewing…
+                                  </>
+                                ) : (
+                                  <>
+                                    <Scale className="w-3 h-3" /> Claim — request a
+                                    re-mark
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                      {q.explanation && q.type !== "short" && (
+                        <p className="text-muted-foreground pt-0.5">
                           {q.explanation}
                         </p>
-                      </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
@@ -576,13 +871,13 @@ export default function ExamPage() {
   }
 
   // ============================ SETUP ============================
-  const canStart = source === "quiz" ? !!selectedQuizId : !!selectedNoteId;
+  const canStart = source === "quiz" ? !!selectedQuizId : !!courseId;
 
   return (
     <DashboardLayout>
       <PageHeader
         title="Exam Mode"
-        description="Sit a timed exam from a saved quiz, or from a lesson you've studied"
+        description="Simulate a full exam from a course's lessons, or sit a saved quiz"
         icon={<ClipboardCheck className="w-5 h-5" />}
       />
 
@@ -598,76 +893,117 @@ export default function ExamPage() {
             className="mb-6"
           >
             <TabsList>
+              <TabsTrigger value="course">
+                <GraduationCap className="w-4 h-4 mr-2" /> Simulate from a Course
+              </TabsTrigger>
               <TabsTrigger value="quiz">
                 <Target className="w-4 h-4 mr-2" /> Saved Quiz
-              </TabsTrigger>
-              <TabsTrigger value="lesson">
-                <FileText className="w-4 h-4 mr-2" /> From a Lesson
               </TabsTrigger>
             </TabsList>
           </Tabs>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Source list */}
+            {/* Source picker */}
             <div className="lg:col-span-2">
-              {source === "quiz" ? (
-                quizzes.length === 0 ? (
+              {source === "course" ? (
+                courses.length === 0 ? (
                   <SourceEmpty
-                    title="No saved quizzes yet"
-                    body="Create a quiz in the Quiz Generator, then sit it here as an exam."
-                    href="/quiz"
-                    cta="Go to Quiz Generator"
+                    title="No courses yet"
+                    body="Upload study material in the Notes Generator and assign it to a course. Then simulate a full exam from everything in that course."
+                    href="/notes"
+                    cta="Go to Notes Generator"
                   />
                 ) : (
-                  <>
-                    <h3 className="font-semibold mb-3">Choose a quiz</h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {quizzes.map((quiz) => (
-                        <SelectableCard
-                          key={quiz.id}
-                          selected={selectedQuizId === quiz.id}
-                          onClick={() => setSelectedQuizId(quiz.id)}
-                          title={quiz.title}
-                          meta={
-                            <>
-                              <Target className="w-3 h-3" />
-                              {quiz.questions.length} questions
-                              <Clock className="w-3 h-3 ml-1" />
-                              {formatDate(quiz.createdAt)}
-                            </>
-                          }
-                        />
-                      ))}
-                    </div>
-                  </>
+                  <Card>
+                    <CardContent className="p-5 space-y-5">
+                      <div>
+                        <Label className="text-sm mb-2 block">Course</Label>
+                        <Select
+                          value={courseId}
+                          onValueChange={(v) => {
+                            setCourseId(v);
+                            setLessonId(ALL_LESSONS);
+                          }}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a course" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {courses.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <Label className="text-sm mb-2 block">Lesson scope</Label>
+                        <Select
+                          value={lessonId}
+                          onValueChange={setLessonId}
+                          disabled={!courseId}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="All lessons" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={ALL_LESSONS}>
+                              All lessons in this course
+                              {courseId ? ` (${courseNotes.length})` : ""}
+                            </SelectItem>
+                            {courseNotes.map((n) => (
+                              <SelectItem key={n.id} value={n.id}>
+                                {n.title}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {courseId && courseNotes.length === 0 && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                            This course has no lessons yet.{" "}
+                            <Link href="/notes" className="underline">
+                              Add some notes
+                            </Link>
+                            .
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-start gap-2 text-xs text-muted-foreground p-3 rounded-lg bg-muted/50">
+                        <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-violet-500" />
+                        The AI reads all selected lessons and sets a paper:
+                        Section A (10 × MCQ / True-False, 2 marks each) and
+                        Section B (5 × written/code, 3 marks each). Written
+                        answers are AI-graded.
+                      </div>
+                    </CardContent>
+                  </Card>
                 )
-              ) : notes.length === 0 ? (
+              ) : quizzes.length === 0 ? (
                 <SourceEmpty
-                  title="No lessons saved yet"
-                  body="Upload study material in the Notes Generator. Your saved notes become lessons you can be examined on."
-                  href="/notes"
-                  cta="Go to Notes Generator"
+                  title="No saved quizzes yet"
+                  body="Create a quiz in the Quiz Generator, then sit it here as a timed exam."
+                  href="/quiz"
+                  cta="Go to Quiz Generator"
                 />
               ) : (
                 <>
-                  <h3 className="font-semibold mb-1">Choose a lesson</h3>
-                  <p className="text-sm text-muted-foreground mb-3">
-                    We&apos;ll summarize what you learned and build a fresh exam
-                    from it.
-                  </p>
+                  <h3 className="font-semibold mb-3">Choose a quiz</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {notes.map((note) => (
+                    {quizzes.map((quiz) => (
                       <SelectableCard
-                        key={note.id}
-                        selected={selectedNoteId === note.id}
-                        onClick={() => setSelectedNoteId(note.id)}
-                        title={note.title}
+                        key={quiz.id}
+                        selected={selectedQuizId === quiz.id}
+                        onClick={() => setSelectedQuizId(quiz.id)}
+                        title={quiz.title}
                         meta={
                           <>
-                            <FileText className="w-3 h-3" />
-                            {note.sourceFile ?? "Lesson"}
+                            <Target className="w-3 h-3" />
+                            {quiz.questions.length} questions
                             <Clock className="w-3 h-3 ml-1" />
-                            {formatDate(note.createdAt)}
+                            {formatDate(quiz.createdAt)}
                           </>
                         }
                       />
@@ -682,29 +1018,6 @@ export default function ExamPage() {
               <h3 className="font-semibold mb-3">Exam settings</h3>
               <Card>
                 <CardContent className="p-5 space-y-5">
-                  {source === "lesson" && (
-                    <div>
-                      <Label className="text-sm mb-2 block">
-                        Number of questions
-                      </Label>
-                      <Select
-                        value={numQuestions}
-                        onValueChange={setNumQuestions}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {QUESTION_OPTIONS.map((n) => (
-                            <SelectItem key={n} value={n}>
-                              {n} questions
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
                   <div>
                     <Label className="text-sm mb-2 block">Time limit</Label>
                     <Select value={duration} onValueChange={setDuration}>
@@ -735,10 +1048,40 @@ export default function ExamPage() {
                     />
                   </div>
 
+                  {source === "course" && (
+                    <div>
+                      <Label className="text-sm mb-2 block">
+                        Grading strictness
+                      </Label>
+                      <Select
+                        value={strictness}
+                        onValueChange={(v) => setStrictness(v as ExamStrictness)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="lenient">
+                            Lenient — reward partial understanding
+                          </SelectItem>
+                          <SelectItem value="balanced">
+                            Balanced — fair partial marks
+                          </SelectItem>
+                          <SelectItem value="strict">
+                            Strict — require precise, complete answers
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        How harshly the AI marks your written (Section B) answers.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="flex items-start gap-2 text-xs text-muted-foreground p-3 rounded-lg bg-muted/50">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-500" />
-                    No answers or explanations are shown until you submit. The
-                    exam auto-submits when time runs out.
+                    No answers are shown until you submit. The exam auto-submits
+                    when time runs out.
                   </div>
 
                   <Button
@@ -748,12 +1091,12 @@ export default function ExamPage() {
                   >
                     {building ? (
                       <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Building
-                        exam…
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Setting
+                        paper…
                       </>
-                    ) : source === "lesson" ? (
+                    ) : source === "course" ? (
                       <>
-                        <Sparkles className="w-4 h-4 mr-2" /> Summarize & Start
+                        <Sparkles className="w-4 h-4 mr-2" /> Simulate Exam
                       </>
                     ) : (
                       <>
@@ -762,12 +1105,12 @@ export default function ExamPage() {
                     )}
                   </Button>
 
-                  {source === "lesson" && !hasApiKey && (
+                  {source === "course" && !hasApiKey && (
                     <p className="text-center text-xs text-muted-foreground">
                       <Link href="/settings" className="text-primary hover:underline">
                         Add your API key
                       </Link>{" "}
-                      to build lesson exams.
+                      to simulate exams.
                     </p>
                   )}
                 </CardContent>

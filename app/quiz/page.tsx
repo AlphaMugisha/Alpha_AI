@@ -7,7 +7,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
 import { generateQuiz } from "@/lib/ai";
 import { parseFile, validateFile } from "@/lib/fileParser";
-import { quizDb } from "@/lib/db";
+import { quizDb, notesDb } from "@/lib/db";
 import { generateId, formatDate, formatFileSize } from "@/lib/utils";
 import { Quiz, QuizQuestion, QuizResult } from "@/types";
 import { toast } from "sonner";
@@ -53,7 +53,9 @@ export default function QuizPage() {
   const [numQuestions, setNumQuestions] = useState("10");
   const [inputContent, setInputContent] = useState("");
   const [uploadedFile, setUploadedFile] = useState<{ name: string; content: string } | null>(null);
+  const [prefilling, setPrefilling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const autoNoteRef = useRef(false);
 
   const refreshQuizzes = async () => {
     setQuizzes(await quizDb.getAll());
@@ -62,6 +64,43 @@ export default function QuizPage() {
   useEffect(() => {
     refreshQuizzes().catch(() => {});
   }, []);
+
+  // Deep link from a note: /quiz?note=<id> — auto-build a quiz from that lesson and start it.
+  useEffect(() => {
+    if (autoNoteRef.current) return;
+    const noteId = new URLSearchParams(window.location.search).get("note");
+    if (!noteId || !hasApiKey) return;
+    autoNoteRef.current = true;
+    (async () => {
+      setPrefilling(true);
+      try {
+        const all = await notesDb.getAll();
+        const note = all.find((n) => n.id === noteId);
+        if (!note) {
+          toast.error("Lesson not found.");
+          return;
+        }
+        const questions = await generateQuiz(aiConfig, note.content, 10);
+        const quiz: Quiz = {
+          id: generateId(),
+          title: note.title,
+          questions,
+          sourceContent: note.content.slice(0, 500),
+          createdAt: new Date(),
+        };
+        await quizDb.save(quiz);
+        await refreshQuizzes();
+        startQuiz(quiz);
+        addSession("quiz", quiz.title);
+        toast.success(`Quiz ready — ${questions.length} questions!`);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to make quiz from lesson.");
+      } finally {
+        setPrefilling(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasApiKey, aiConfig]);
 
   const handleFile = async (file: File) => {
     const error = validateFile(file);
@@ -357,6 +396,16 @@ export default function QuizPage() {
         description="Generate AI-powered quizzes from your study materials"
         icon={<Brain className="w-5 h-5" />}
       />
+
+      {prefilling && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3 text-primary" />
+            <p className="font-medium">Building your quiz…</p>
+            <p className="text-sm text-muted-foreground">Generating questions from your lesson.</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Generator */}

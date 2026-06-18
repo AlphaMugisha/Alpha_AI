@@ -8,9 +8,9 @@ import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
 import { generateNotes } from "@/lib/ai";
 import { parseFile, validateFile } from "@/lib/fileParser";
-import { notesDb } from "@/lib/db";
+import { notesDb, coursesDb } from "@/lib/db";
 import { generateId, formatDate, truncate, formatFileSize } from "@/lib/utils";
-import { Note } from "@/types";
+import { Note, Course } from "@/types";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -25,10 +25,22 @@ import {
   Clock,
   File,
   ClipboardCheck,
+  Brain,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { EmptyState } from "@/components/shared/EmptyState";
 import Link from "next/link";
@@ -45,6 +57,12 @@ export default function NotesPage() {
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number; content: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [courseId, setCourseId] = useState<string>("");
+  const [creatingCourse, setCreatingCourse] = useState(false);
+  const [newCourseName, setNewCourseName] = useState("");
+  const [fullscreen, setFullscreen] = useState(false);
+
   const refreshNotes = async () => {
     const all = await notesDb.getAll();
     setNotes(all);
@@ -53,7 +71,42 @@ export default function NotesPage() {
 
   useEffect(() => {
     refreshNotes().catch(() => {});
+    coursesDb.getAll().then(setCourses).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreen]);
+
+  const courseName = (id?: string) =>
+    courses.find((c) => c.id === id)?.name;
+
+  const createCourse = async () => {
+    const name = newCourseName.trim();
+    if (!name) return;
+    try {
+      const course = await coursesDb.create(name);
+      setCourses((prev) => [course, ...prev]);
+      setCourseId(course.id);
+      setNewCourseName("");
+      setCreatingCourse(false);
+      toast.success(`Course "${course.name}" added.`);
+    } catch (err) {
+      const code = (err as { code?: string })?.code;
+      toast.error(
+        code === "23505"
+          ? "A course with that name already exists."
+          : `Could not create course: ${
+              err instanceof Error ? err.message : "unknown error"
+            }`
+      );
+    }
+  };
 
   const handleFile = async (file: File) => {
     const error = validateFile(file);
@@ -78,6 +131,7 @@ export default function NotesPage() {
 
   const handleGenerate = async () => {
     if (!uploadedFile) { toast.error("Please upload a file first."); return; }
+    if (!courseId) { toast.error("Please choose which course this file belongs to."); return; }
     if (!hasApiKey) { toast.error("Please add your Gemini API key in Settings."); return; }
 
     setIsGenerating(true);
@@ -88,6 +142,7 @@ export default function NotesPage() {
         title: uploadedFile.name.replace(/\.[^.]+$/, ""),
         content: notesContent,
         sourceFile: uploadedFile.name,
+        courseId,
         createdAt: new Date(),
         tags: ["ai-generated"],
       };
@@ -195,6 +250,8 @@ export default function NotesPage() {
                 <div>
                   <h3 className="font-semibold">{selectedNote.title}</h3>
                   <p className="text-xs text-muted-foreground">
+                    {courseName(selectedNote.courseId) &&
+                      `${courseName(selectedNote.courseId)} · `}
                     {formatDate(selectedNote.createdAt)}
                     {selectedNote.sourceFile && ` · ${selectedNote.sourceFile}`}
                   </p>
@@ -202,15 +259,30 @@ export default function NotesPage() {
                 <div className="flex gap-2">
                   <Button
                     size="sm"
+                    variant="outline"
+                    onClick={() => setFullscreen(true)}
+                    title="Read full screen"
+                  >
+                    <Maximize2 className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => router.push(`/quiz?note=${selectedNote.id}`)}
+                  >
+                    <Brain className="w-4 h-4 mr-2" /> Make Quiz
+                  </Button>
+                  <Button
+                    size="sm"
                     className="bg-gradient-to-r from-violet-600 to-indigo-600"
                     onClick={() => router.push(`/exam?lesson=${selectedNote.id}`)}
                   >
-                    <ClipboardCheck className="w-4 h-4 mr-2" /> Make Exam
+                    <ClipboardCheck className="w-4 h-4 mr-2" /> Simulate Exam
                   </Button>
-                  <Button size="sm" variant="outline" onClick={() => exportNote(selectedNote)}>
-                    <Download className="w-4 h-4 mr-2" /> Export
+                  <Button size="sm" variant="outline" onClick={() => exportNote(selectedNote)} title="Export as Markdown">
+                    <Download className="w-4 h-4" />
                   </Button>
-                  <Button size="sm" variant="outline" onClick={(e) => deleteNote(selectedNote.id, e)}>
+                  <Button size="sm" variant="outline" onClick={(e) => deleteNote(selectedNote.id, e)} title="Delete note">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -273,9 +345,63 @@ export default function NotesPage() {
                   )}
                 </AnimatePresence>
 
+                {/* Course selection — every uploaded file must belong to a course */}
+                <div className="mt-4">
+                  <Label className="text-sm mb-2 block">
+                    Which course is this for? <span className="text-destructive">*</span>
+                  </Label>
+                  {creatingCourse ? (
+                    <div className="flex gap-2">
+                      <Input
+                        autoFocus
+                        placeholder="e.g. Full-Stack JavaScript"
+                        value={newCourseName}
+                        onChange={(e) => setNewCourseName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") createCourse();
+                          if (e.key === "Escape") setCreatingCourse(false);
+                        }}
+                      />
+                      <Button onClick={createCourse} disabled={!newCourseName.trim()}>
+                        Add
+                      </Button>
+                      <Button variant="outline" onClick={() => setCreatingCourse(false)}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Select value={courseId} onValueChange={setCourseId}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue placeholder="Select a course" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {courses.length === 0 ? (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                              No courses yet — add one
+                            </div>
+                          ) : (
+                            courses.map((c) => (
+                              <SelectItem key={c.id} value={c.id}>
+                                {c.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="outline"
+                        onClick={() => setCreatingCourse(true)}
+                      >
+                        <Plus className="w-4 h-4 mr-1" /> New
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
                 <Button
                   onClick={handleGenerate}
-                  disabled={!uploadedFile || isGenerating || !hasApiKey}
+                  disabled={!uploadedFile || !courseId || isGenerating || !hasApiKey}
                   className="w-full mt-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
                   size="lg"
                 >
@@ -296,6 +422,48 @@ export default function NotesPage() {
           )}
         </div>
       </div>
+
+      {/* Full-screen reading mode */}
+      <AnimatePresence>
+        {fullscreen && selectedNote && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background flex flex-col"
+          >
+            <div className="flex items-center justify-between gap-4 px-6 py-4 border-b shrink-0">
+              <div className="min-w-0">
+                <h2 className="font-semibold truncate">{selectedNote.title}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {courseName(selectedNote.courseId) &&
+                    `${courseName(selectedNote.courseId)} · `}
+                  {formatDate(selectedNote.createdAt)}
+                </p>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  className="bg-gradient-to-r from-violet-600 to-indigo-600"
+                  onClick={() => router.push(`/exam?lesson=${selectedNote.id}`)}
+                >
+                  <ClipboardCheck className="w-4 h-4 mr-2" /> Simulate Exam
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setFullscreen(false)}>
+                  <Minimize2 className="w-4 h-4 mr-2" /> Exit full screen
+                </Button>
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <div className="mx-auto max-w-3xl px-6 py-10 prose prose-lg dark:prose-invert">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {selectedNote.content}
+                </ReactMarkdown>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </DashboardLayout>
   );
 }

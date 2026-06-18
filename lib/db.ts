@@ -15,6 +15,7 @@ import { createClient } from "@/lib/supabase/client";
 import {
   ChatSession,
   Note,
+  Course,
   Quiz,
   QuizResult,
   FlashcardDeck,
@@ -37,8 +38,17 @@ function toNote(r: any): Note {
     title: r.title,
     content: r.content ?? "",
     sourceFile: r.source_file ?? undefined,
+    courseId: r.course_id ?? undefined,
     createdAt: new Date(r.created_at),
     tags: r.tags ?? [],
+  };
+}
+
+function toCourse(r: any): Course {
+  return {
+    id: r.id,
+    name: r.name,
+    createdAt: new Date(r.created_at),
   };
 }
 
@@ -122,12 +132,38 @@ export const notesDb = {
       title: note.title,
       content: note.content,
       source_file: note.sourceFile ?? null,
+      course_id: note.courseId ?? null,
       tags: note.tags ?? [],
     });
     if (error) throw error;
   },
   async delete(id: string): Promise<void> {
     const { error } = await db().from("notes").delete().eq("id", id);
+    if (error) throw error;
+  },
+};
+
+// ----------------------------- courses -----------------------------
+export const coursesDb = {
+  async getAll(): Promise<Course[]> {
+    const { data, error } = await db()
+      .from("courses")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map(toCourse);
+  },
+  async create(name: string): Promise<Course> {
+    const { data, error } = await db()
+      .from("courses")
+      .insert({ name: name.trim() })
+      .select()
+      .single();
+    if (error) throw error;
+    return toCourse(data);
+  },
+  async delete(id: string): Promise<void> {
+    const { error } = await db().from("courses").delete().eq("id", id);
     if (error) throw error;
   },
 };

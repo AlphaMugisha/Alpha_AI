@@ -25,6 +25,40 @@ export async function generateChatResponse(
   return result.response.text();
 }
 
+/**
+ * JSON-mode generation. Forces clean JSON output (no markdown fences) and a
+ * generous token budget so large structured payloads (e.g. exams) aren't
+ * truncated mid-object.
+ */
+export async function generateJSON(
+  apiKey: string,
+  prompt: string,
+  systemPrompt?: string
+): Promise<string> {
+  const genAI = getClient(apiKey);
+  // gemini-2.5-flash is a "thinking" model — reasoning tokens count against the
+  // output budget and can truncate the JSON. Disable thinking so the full
+  // budget goes to the response.
+  const generationConfig = {
+    responseMimeType: "application/json",
+    temperature: 0.8,
+    maxOutputTokens: 16384,
+    thinkingConfig: { thinkingBudget: 0 },
+  };
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    systemInstruction: systemPrompt,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    generationConfig: generationConfig as any,
+  });
+  const result = await model.generateContent(prompt);
+  const text = result.response.text();
+  if (!text || !text.trim()) {
+    throw new Error("The model returned an empty response. Please try again.");
+  }
+  return text;
+}
+
 export async function generateNotes(
   apiKey: string,
   content: string,
@@ -33,21 +67,25 @@ export async function generateNotes(
   const genAI = getClient(apiKey);
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
-  const prompt = `You are an expert study note creator. Create comprehensive, well-structured study notes from the following content.
+  const prompt = `You are an expert study-notes creator. Read the source material below and produce CONCISE, well-organized summary notes that distill the key ideas in your own words.
 
-${title ? `Title: ${title}\n` : ""}
-Content:
+${title ? `Title: ${title}\n` : ""}Source material:
 ${content.slice(0, 15000)}
 
-Format the notes with:
-- Clear headings and subheadings (use ## and ###)
-- Key concepts highlighted with **bold**
-- Bullet points for lists
-- Important formulas or definitions in blockquotes (> )
-- A summary section at the end
-- Key takeaways
+CRITICAL:
+- SUMMARIZE — do not copy or restate the source verbatim or reproduce it line by line.
+- Condense to roughly 25-40% of the original length, keeping only what matters for revision.
+- Rephrase ideas clearly and simply; cut filler, repetition, and examples that don't add understanding.
 
-Make the notes detailed, educational, and easy to study from.`;
+Format with Markdown so it's easy to skim and study:
+- A single \`#\` title at the top
+- \`##\` headings grouping related ideas, with \`###\` subsections where helpful
+- **Bold** for key terms and definitions
+- Bullet points for lists of facts, steps, or properties
+- \`>\` blockquotes for crucial definitions, rules, or formulas
+- End with a \`## Key Takeaways\` section of 3-6 bullet points
+
+Output ONLY the Markdown notes, nothing else.`;
 
   const result = await model.generateContent(prompt);
   return result.response.text();

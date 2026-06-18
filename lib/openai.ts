@@ -27,27 +27,49 @@ export async function generateChatResponse(
   return response.choices[0].message.content ?? "";
 }
 
+/** JSON-mode generation — returns a clean JSON string. */
+export async function generateJSON(
+  apiKey: string,
+  prompt: string,
+  systemPrompt?: string
+): Promise<string> {
+  const client = getClient(apiKey);
+  const response = await client.chat.completions.create({
+    model: MODEL,
+    response_format: { type: "json_object" },
+    messages: [
+      ...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []),
+      { role: "user", content: prompt },
+    ],
+  });
+  return response.choices[0].message.content ?? "";
+}
+
 export async function generateNotes(
   apiKey: string,
   content: string,
   title?: string
 ): Promise<string> {
   const client = getClient(apiKey);
-  const prompt = `You are an expert study note creator. Create comprehensive, well-structured study notes from the following content.
+  const prompt = `You are an expert study-notes creator. Read the source material below and produce CONCISE, well-organized summary notes that distill the key ideas in your own words.
 
-${title ? `Title: ${title}\n` : ""}
-Content:
+${title ? `Title: ${title}\n` : ""}Source material:
 ${content.slice(0, 15000)}
 
-Format the notes with:
-- Clear headings and subheadings (use ## and ###)
-- Key concepts highlighted with **bold**
-- Bullet points for lists
-- Important formulas or definitions in blockquotes (> )
-- A summary section at the end
-- Key takeaways
+CRITICAL:
+- SUMMARIZE — do not copy or restate the source verbatim or reproduce it line by line.
+- Condense to roughly 25-40% of the original length, keeping only what matters for revision.
+- Rephrase ideas clearly and simply; cut filler, repetition, and examples that don't add understanding.
 
-Make the notes detailed, educational, and easy to study from.`;
+Format with Markdown so it's easy to skim and study:
+- A single \`#\` title at the top
+- \`##\` headings grouping related ideas, with \`###\` subsections where helpful
+- **Bold** for key terms and definitions
+- Bullet points for lists of facts, steps, or properties
+- \`>\` blockquotes for crucial definitions, rules, or formulas
+- End with a \`## Key Takeaways\` section of 3-6 bullet points
+
+Output ONLY the Markdown notes, nothing else.`;
 
   const response = await client.chat.completions.create({
     model: MODEL,

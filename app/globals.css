@@ -107,11 +107,77 @@ html {
 }
 
 .prose {
-  @apply max-w-none;
+  @apply max-w-none text-foreground leading-relaxed;
+}
+
+.prose h1 {
+  @apply text-2xl font-bold mt-6 mb-3 pb-2 border-b border-border tracking-tight;
+}
+
+.prose h2 {
+  @apply text-xl font-bold mt-6 mb-3 tracking-tight;
+}
+
+.prose h3 {
+  @apply text-lg font-semibold mt-5 mb-2;
+}
+
+.prose h4 {
+  @apply text-base font-semibold mt-4 mb-2;
+}
+
+.prose p {
+  @apply my-3;
+}
+
+.prose strong {
+  @apply font-semibold text-foreground;
+}
+
+.prose a {
+  @apply text-primary underline underline-offset-2 hover:opacity-80;
+}
+
+.prose ul {
+  @apply my-3 pl-6 list-disc space-y-1.5 marker:text-muted-foreground;
+}
+
+.prose ol {
+  @apply my-3 pl-6 list-decimal space-y-1.5 marker:text-muted-foreground;
+}
+
+.prose li {
+  @apply pl-1;
+}
+
+.prose li > ul,
+.prose li > ol {
+  @apply my-1.5;
+}
+
+.prose blockquote {
+  @apply my-4 border-l-4 border-primary/50 bg-muted/50 rounded-r-lg px-4 py-2 italic text-muted-foreground;
+}
+
+.prose hr {
+  @apply my-6 border-border;
+}
+
+.prose table {
+  @apply my-4 w-full text-sm border-collapse;
+}
+
+.prose th,
+.prose td {
+  @apply border border-border px-3 py-2 text-left;
+}
+
+.prose th {
+  @apply bg-muted font-semibold;
 }
 
 .prose pre {
-  @apply bg-muted rounded-lg p-4 overflow-x-auto;
+  @apply bg-muted rounded-lg p-4 overflow-x-auto my-4;
 }
 
 .prose code {
@@ -120,4 +186,21 @@ html {
 
 .prose pre code {
   @apply bg-transparent p-0;
+}
+
+/* Larger reading size for full-screen note view */
+.prose-lg {
+  @apply text-[1.0625rem] leading-8;
+}
+
+.prose-lg h1 {
+  @apply text-3xl;
+}
+
+.prose-lg h2 {
+  @apply text-2xl;
+}
+
+.prose-lg h3 {
+  @apply text-xl;
 }
