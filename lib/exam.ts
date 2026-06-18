@@ -112,6 +112,12 @@ Rules:
   - "correctAnswer" is the 0-based index (0-3) of the correct option.
   - Keep questions clear and unambiguous.
 
+IMPORTANT — produce a FRESH paper (variation seed: ${Math.random()
+    .toString(36)
+    .slice(2)}-${Date.now()}): this is a new attempt, so write DIFFERENT questions
+than you would otherwise — vary the wording, the scenarios, the named people, the
+order, and which specific concepts you test. Do not reuse a standard set.
+
 Return ONLY JSON in EXACTLY this shape:
 {
   "sectionA": [

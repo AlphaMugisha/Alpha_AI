@@ -261,6 +261,12 @@ export default function ExamPage() {
 
       setGrading(false);
       setPhase("results");
+      // Leave fullscreen to read results normally.
+      try {
+        if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+      } catch {
+        /* ignore */
+      }
       if (auto) toast.info("Time's up — exam submitted automatically.");
     },
     [activeExam, activeQuizId, answers, aiConfig, passMark, strictness, totalSeconds, timeLeft, addSession]
@@ -276,6 +282,22 @@ export default function ExamPage() {
   useEffect(() => {
     if (phase === "taking" && timeLeft === 0) submitExam(true);
   }, [phase, timeLeft, submitExam]);
+
+  // ----- fullscreen helpers (called from the click gesture) -----
+  const enterFullscreen = () => {
+    try {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } catch {
+      /* unsupported — ignore */
+    }
+  };
+  const exitFullscreen = () => {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  };
 
   // ----- start -----
   const beginExam = (exam: StructuredExam) => {
@@ -348,6 +370,7 @@ export default function ExamPage() {
         return;
       }
       setActiveQuizId(quiz.id);
+      enterFullscreen();
       beginExam(quizToExam(quiz));
       return;
     }
@@ -376,6 +399,7 @@ export default function ExamPage() {
       .map((n) => `# ${n.title}\n${n.content}`)
       .join("\n\n---\n\n");
 
+    enterFullscreen();
     setBuilding(true);
     try {
       const questions = await generateExam(aiConfig, content, course?.name);
@@ -385,6 +409,7 @@ export default function ExamPage() {
       });
       toast.success("Exam paper ready. Good luck!");
     } catch (err) {
+      exitFullscreen();
       toast.error(
         err instanceof Error ? err.message : "Failed to simulate the exam."
       );
@@ -394,6 +419,7 @@ export default function ExamPage() {
   };
 
   const restart = () => {
+    exitFullscreen();
     setPhase("setup");
     setActiveExam(null);
     setAnswers([]);
@@ -429,7 +455,9 @@ export default function ExamPage() {
     const ans = answers[currentQ];
 
     return (
-      <DashboardLayout>
+      // No DashboardLayout here on purpose — the exam is "locked": no sidebar,
+      // no links out to chat/notes/etc. Fills the screen.
+      <div className="fixed inset-0 z-40 overflow-y-auto bg-background p-4 md:p-6">
         <div className="max-w-5xl mx-auto">
           {/* Exam bar */}
           <div className="flex items-center justify-between gap-4 mb-6 p-4 rounded-2xl border bg-card/80 backdrop-blur-sm">
@@ -488,6 +516,11 @@ export default function ExamPage() {
                                 : "Written answer"}
                           </span>
                         </div>
+                        {q.section === "B" && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400 mb-1.5">
+                            Section B: answer any <b>2 of 4</b> — only your best 2 count (20 marks).
+                          </p>
+                        )}
                         <CardTitle className="text-lg font-medium">
                           <span className="text-muted-foreground mr-2">
                             {currentQ + 1}.
@@ -657,7 +690,7 @@ export default function ExamPage() {
               </span>{" "}
               questions.
               {answeredCount < activeExam.questions.length &&
-                " Unanswered questions score zero."}
+                " Unanswered questions score zero — but Section B only counts your best 2 of 4, so leaving 2 of them blank is expected."}
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmSubmit(false)}>
@@ -691,6 +724,7 @@ export default function ExamPage() {
 
   // ============================ RESULTS ============================
   if (phase === "results" && activeExam && summary) {
+    const { countedIdx } = scoreExam(activeExam.questions, grades);
     return (
       <DashboardLayout>
         <div className="max-w-2xl mx-auto space-y-6">
@@ -713,8 +747,8 @@ export default function ExamPage() {
                 {summary.passed ? "Passed! 🎉" : "Did not pass 💪"}
               </h2>
               <p className="text-muted-foreground mb-6">
-                {summary.score} / {summary.totalQuestions} marks · pass mark{" "}
-                {summary.passMark}%
+                {summary.score} / {summary.totalQuestions} marks → {summary.percentage}% ·
+                pass mark {summary.passMark}%
               </p>
               <div className="grid grid-cols-3 gap-4 mb-8">
                 <div className="p-3 bg-muted rounded-xl">
@@ -778,18 +812,32 @@ export default function ExamPage() {
                         </span>
                         {q.question}
                       </p>
-                      <span
-                        className={cn(
-                          "shrink-0 text-xs font-bold px-2 py-1 rounded-lg",
-                          full
-                            ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400"
-                            : partial
-                              ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
-                              : "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span
+                          className={cn(
+                            "text-xs font-bold px-2 py-1 rounded-lg",
+                            full
+                              ? "bg-green-100 text-green-700 dark:bg-green-950/30 dark:text-green-400"
+                              : partial
+                                ? "bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400"
+                                : "bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400"
+                          )}
+                        >
+                          {g ? `${g.awarded}/${g.max}` : `0/${q.marks}`}
+                        </span>
+                        {q.section === "B" && (
+                          <span
+                            className={cn(
+                              "text-[10px] font-medium px-1.5 py-0.5 rounded",
+                              countedIdx.has(i)
+                                ? "bg-primary/10 text-primary"
+                                : "bg-muted text-muted-foreground"
+                            )}
+                          >
+                            {countedIdx.has(i) ? "counts" : "best 2 only"}
+                          </span>
                         )}
-                      >
-                        {g ? `${g.awarded}/${g.max}` : `0/${q.marks}`}
-                      </span>
+                      </div>
                     </div>
 
                     {/* Your answer */}
@@ -996,9 +1044,10 @@ export default function ExamPage() {
                       <div className="flex items-start gap-2 text-xs text-muted-foreground p-3 rounded-lg bg-muted/50">
                         <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-violet-500" />
                         The AI reads all selected lessons and sets a paper:
-                        Section A (10 × MCQ / True-False, 2 marks each) and
-                        Section B (5 × written/code, 3 marks each). Written
-                        answers are AI-graded.
+                        Section A (20 × MCQ / True-False, 2 marks = 40) and
+                        Section B (4 × written/code, 10 marks — you answer any 2
+                        = 20). Total 60, converted to a %. Written answers are
+                        AI-graded.
                       </div>
                     </CardContent>
                   </Card>
