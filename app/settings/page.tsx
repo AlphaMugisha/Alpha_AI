@@ -188,7 +188,7 @@ function APIKeySection({
 }
 
 export default function SettingsPage() {
-  const { settings, updateSettings, hasGeminiKey, hasOpenAIKey, hasAnthropicKey, aiConfig } = useSettings();
+  const { settings, updateSettings, hasGeminiKey, hasOpenAIKey, hasAnthropicKey, hasGroqKey, aiConfig } = useSettings();
   const { user, refreshProfile } = useAuth();
   const { setTheme } = useTheme();
   const [, startTransition] = useTransition();
@@ -343,6 +343,19 @@ export default function SettingsPage() {
                   onRemove={() => {
                     updateSettings({ anthropicApiKey: "" });
                     syncToCloud({ anthropic_api_key: "" });
+                  }}
+                />
+                <Separator />
+                <APIKeySection
+                  provider={PROVIDERS[3]}
+                  savedKey={settings.groqApiKey || ""}
+                  onSave={(key) => {
+                    updateSettings({ groqApiKey: key });
+                    syncToCloud({ groq_api_key: key });
+                  }}
+                  onRemove={() => {
+                    updateSettings({ groqApiKey: "" });
+                    syncToCloud({ groq_api_key: "" });
                   }}
                 />
               </div>
