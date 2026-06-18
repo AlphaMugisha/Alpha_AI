@@ -38,6 +38,7 @@ import {
   Sparkles,
   GraduationCap,
   Scale,
+  Maximize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -154,6 +155,7 @@ export default function ExamPage() {
   const [summary, setSummary] = useState<ExamSummary | null>(null);
   const [claimingIndex, setClaimingIndex] = useState<number | null>(null);
   const [claimed, setClaimed] = useState<Set<number>>(new Set());
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // ----- load library -----
   useEffect(() => {
@@ -282,6 +284,28 @@ export default function ExamPage() {
   useEffect(() => {
     if (phase === "taking" && timeLeft === 0) submitExam(true);
   }, [phase, timeLeft, submitExam]);
+
+  // ----- exam lockdown: warn if the student leaves fullscreen or the tab -----
+  useEffect(() => {
+    if (phase !== "taking") return;
+    const onFs = () => {
+      const active = !!document.fullscreenElement;
+      setIsFullscreen(active);
+      if (!active)
+        toast.warning("You left full screen — exams must stay full screen. Tap “Full screen” to resume.");
+    };
+    const onVisibility = () => {
+      if (document.hidden)
+        toast.warning("Leaving the exam tab isn't allowed — come back to continue.");
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    document.addEventListener("visibilitychange", onVisibility);
+    setIsFullscreen(!!document.fullscreenElement);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [phase]);
 
   // ----- fullscreen helpers (called from the click gesture) -----
   const enterFullscreen = () => {
@@ -480,6 +504,15 @@ export default function ExamPage() {
               <Clock className="w-5 h-5" />
               {formatClock(timeLeft)}
             </motion.div>
+            {!isFullscreen && (
+              <Button
+                variant="outline"
+                onClick={enterFullscreen}
+                className="shrink-0 border-amber-400 text-amber-600"
+              >
+                <Maximize2 className="w-4 h-4 mr-2" /> Full screen
+              </Button>
+            )}
             <Button
               onClick={() => setConfirmSubmit(true)}
               className="bg-gradient-to-r from-violet-600 to-indigo-600 shrink-0"
@@ -718,7 +751,7 @@ export default function ExamPage() {
             </div>
           </div>
         )}
-      </DashboardLayout>
+      </div>
     );
   }
 
