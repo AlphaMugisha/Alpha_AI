@@ -16,16 +16,18 @@ const STRICTNESS_GUIDE: Record<ExamStrictness, string> = {
  *
  * The exam follows a fixed blueprint (kept constant across courses):
  *   Section A — 10 questions, 2 marks each: a mix of MCQ and True/False.
- *   Section B —  5 questions, 3 marks each: short written / code answers.
+ *   Section A — 20 questions, 2 marks each  → 40 marks  (MCQ + True/False)
+ *   Section B —  4 questions, 10 marks each → answer ANY 2 → 20 marks
+ *   Raw total 60, converted to a percentage out of 100.
  *
  * Provider-agnostic: everything routes through generateChatResponse so it
  * works for both Gemini and OpenAI without touching the provider libs.
  */
 
-const SECTION_A_COUNT = 10;
+const SECTION_A_COUNT = 20;
 const SECTION_A_MARKS = 2;
-const SECTION_B_COUNT = 5;
-const SECTION_B_MARKS = 3;
+const SECTION_B_COUNT = 4;
+const SECTION_B_MARKS = 10;
 
 function extractJson(text: string): string {
   // Prefer a fenced block, otherwise the outermost {...} object.
@@ -90,14 +92,16 @@ export async function generateExam(
     courseName ? ` for the course "${courseName}"` : ""
   }, grounded STRICTLY in the study material below. Mirror the style of a typical written exam.
 
-Section A — EXACTLY ${SECTION_A_COUNT} questions, ${SECTION_A_MARKS} marks each. Mix these two types:
+Section A — EXACTLY ${SECTION_A_COUNT} questions, ${SECTION_A_MARKS} marks each (${SECTION_A_COUNT * SECTION_A_MARKS} marks total). Mix these two types:
   - "mcq": multiple choice with EXACTLY 4 options and one correct answer. Make many of them
     scenario-based — a named student faces a real situation, then a question (e.g.
     "Daniel is building a registration form… Which statement about X is correct?").
   - "truefalse": a single clear statement the student must judge True or False.
   Decide the blend yourself; aim for a realistic mix.
 
-Section B — EXACTLY ${SECTION_B_COUNT} questions, ${SECTION_B_MARKS} marks each, all type "short":
+Section B — EXACTLY ${SECTION_B_COUNT} questions, ${SECTION_B_MARKS} marks each, all type "short".
+  The student will answer ANY 2 of these ${SECTION_B_COUNT} (only their best 2 count, for 20 marks),
+  so make all ${SECTION_B_COUNT} substantial, independent, and of comparable difficulty.
   - Practical applied tasks: write code, complete a snippet, define something, or compare/explain.
   - Frame each with a brief real-world scenario and a clear instruction
     (e.g. "Mutoni needs a DELETE endpoint that removes a student by id. Write the route.").

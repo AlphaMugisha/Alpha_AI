@@ -66,10 +66,10 @@ function MessageBubble({ message }: { message: Message }) {
       )}
       <div
         className={cn(
-          "group relative max-w-[80%] rounded-2xl px-4 py-3",
+          "group relative",
           isUser
-            ? "bg-primary text-primary-foreground rounded-tr-sm"
-            : "bg-muted rounded-tl-sm"
+            ? "max-w-[80%] rounded-2xl rounded-tr-sm px-4 py-3 bg-primary text-primary-foreground"
+            : "max-w-[85%] pt-1"
         )}
       >
         {isUser ? (
@@ -327,7 +327,7 @@ export default function ChatPage() {
                     <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shrink-0">
                       <Bot className="w-4 h-4 text-white" />
                     </div>
-                    <div className="bg-muted rounded-2xl rounded-tl-sm px-4 py-3">
+                    <div className="pt-2">
                       <div className="flex gap-1">
                         {[0, 1, 2].map((i) => (
                           <motion.div

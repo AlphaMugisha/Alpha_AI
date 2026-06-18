@@ -69,6 +69,30 @@ type Source = "course" | "quiz";
 const DURATION_OPTIONS = ["10", "15", "20", "30", "45", "60", "90"];
 const ALL_LESSONS = "__all__";
 
+// Marking scheme: Section A 40 + Section B (best 2 of 4 × 10) 20 = 60 raw → %.
+const EXAM_TOTAL = 60;
+const SECTION_B_KEEP = 2;
+
+/**
+ * Raw score out of 60: all Section A marks + the best SECTION_B_KEEP Section B
+ * answers. Returns which Section B question indices actually counted.
+ */
+function scoreExam(questions: ExamQuestion[], grades: ExamGrade[]) {
+  let sectionA = 0;
+  const sectionB: { idx: number; awarded: number }[] = [];
+  questions.forEach((q, i) => {
+    const awarded = grades[i]?.awarded ?? 0;
+    if (q.section === "A") sectionA += awarded;
+    else sectionB.push({ idx: i, awarded });
+  });
+  const ranked = [...sectionB].sort((a, b) => b.awarded - a.awarded);
+  const counted = ranked.slice(0, SECTION_B_KEEP);
+  const countedIdx = new Set(counted.map((s) => s.idx));
+  const sectionBScore = counted.reduce((s, v) => s + v.awarded, 0);
+  const raw = Math.round((sectionA + sectionBScore) * 10) / 10;
+  return { raw, countedIdx };
+}
+
 function formatClock(totalSeconds: number) {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
@@ -207,14 +231,13 @@ export default function ExamPage() {
         }
       }
 
-      const totalMarks = qs.reduce((s, q) => s + q.marks, 0);
-      const awarded = result.reduce((s, g) => s + g.awarded, 0);
-      const percentage = Math.round((awarded / totalMarks) * 100);
+      const { raw } = scoreExam(qs, result);
+      const percentage = Math.round((raw / EXAM_TOTAL) * 100);
 
       setGrades(result);
       setSummary({
-        score: Math.round(awarded * 10) / 10,
-        totalQuestions: totalMarks, // marks-based total
+        score: raw,
+        totalQuestions: EXAM_TOTAL, // raw is out of 60, shown as a %
         percentage,
         passed: percentage >= passMark,
         passMark,
@@ -293,15 +316,14 @@ export default function ExamPage() {
       setGrades(newGrades);
       setClaimed((s) => new Set(s).add(i));
 
-      // Recompute the overall result.
-      const totalMarks = activeExam.questions.reduce((s, qq) => s + qq.marks, 0);
-      const awarded = newGrades.reduce((s, g) => s + g.awarded, 0);
-      const percentage = Math.round((awarded / totalMarks) * 100);
+      // Recompute the overall result (best 2 of Section B may change).
+      const { raw } = scoreExam(activeExam.questions, newGrades);
+      const percentage = Math.round((raw / EXAM_TOTAL) * 100);
       setSummary((s) =>
         s
           ? {
               ...s,
-              score: Math.round(awarded * 10) / 10,
+              score: raw,
               percentage,
               passed: percentage >= s.passMark,
             }
