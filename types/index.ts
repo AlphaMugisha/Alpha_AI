@@ -145,6 +145,8 @@ export interface StudyGoal {
 export interface UserSettings {
   geminiApiKey: string;
   openaiApiKey: string;
+  anthropicApiKey: string;
+  groqApiKey: string;
   aiProvider: AIProvider;
   theme: "light" | "dark" | "system";
   defaultDifficulty: "beginner" | "intermediate" | "advanced";
@@ -192,7 +194,7 @@ export interface CodingProject {
 
 export type Difficulty = "beginner" | "intermediate" | "advanced";
 
-export type AIProvider = "gemini" | "openai";
+export type AIProvider = "gemini" | "openai" | "anthropic" | "groq";
 
 export interface AIConfig {
   provider: AIProvider;

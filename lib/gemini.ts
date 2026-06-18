@@ -36,13 +36,13 @@ export async function generateJSON(
   systemPrompt?: string
 ): Promise<string> {
   const genAI = getClient(apiKey);
-  // gemini-2.5-flash is a "thinking" model — reasoning tokens count against the
-  // output budget and can truncate the JSON. Disable thinking so the full
-  // budget goes to the response.
+  // gemini-2.5-flash (free tier). It's a "thinking" model, so we (a) disable
+  // thinking and (b) give a large output budget — together this stops the JSON
+  // from being truncated mid-object.
   const generationConfig = {
     responseMimeType: "application/json",
     temperature: 0.8,
-    maxOutputTokens: 16384,
+    maxOutputTokens: 65536,
     thinkingConfig: { thinkingBudget: 0 },
   };
   const model = genAI.getGenerativeModel({

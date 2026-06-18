@@ -61,6 +61,24 @@ const PROVIDERS = [
     keyHint: "Get a key at platform.openai.com",
     keyUrl: "https://platform.openai.com/api-keys",
   },
+  {
+    id: "anthropic" as AIProvider,
+    name: "Anthropic Claude",
+    model: "claude-opus-4-8",
+    logo: "✱",
+    color: "from-orange-500 to-amber-600",
+    keyHint: "Get a key at console.anthropic.com (Claude Pro ≠ API access)",
+    keyUrl: "https://console.anthropic.com/settings/keys",
+  },
+  {
+    id: "groq" as AIProvider,
+    name: "Groq (Free)",
+    model: "llama-3.3-70b-versatile",
+    logo: "⚡",
+    color: "from-rose-500 to-pink-600",
+    keyHint: "Get a FREE key at console.groq.com — no credit card needed",
+    keyUrl: "https://console.groq.com/keys",
+  },
 ];
 
 function APIKeySection({
@@ -170,7 +188,7 @@ function APIKeySection({
 }
 
 export default function SettingsPage() {
-  const { settings, updateSettings, hasGeminiKey, hasOpenAIKey, aiConfig } = useSettings();
+  const { settings, updateSettings, hasGeminiKey, hasOpenAIKey, hasAnthropicKey, aiConfig } = useSettings();
   const { user, refreshProfile } = useAuth();
   const { setTheme } = useTheme();
   const [, startTransition] = useTransition();
@@ -235,10 +253,17 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Provider selector cards */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                 {PROVIDERS.map((p) => {
                   const isActive = settings.aiProvider === p.id;
-                  const hasKey = p.id === "gemini" ? hasGeminiKey : hasOpenAIKey;
+                  const hasKey =
+                    p.id === "gemini"
+                      ? hasGeminiKey
+                      : p.id === "openai"
+                        ? hasOpenAIKey
+                        : p.id === "anthropic"
+                          ? hasAnthropicKey
+                          : hasGroqKey;
                   return (
                     <button
                       key={p.id}
@@ -305,6 +330,19 @@ export default function SettingsPage() {
                   onRemove={() => {
                     updateSettings({ openaiApiKey: "" });
                     syncToCloud({ openai_api_key: "" });
+                  }}
+                />
+                <Separator />
+                <APIKeySection
+                  provider={PROVIDERS[2]}
+                  savedKey={settings.anthropicApiKey || ""}
+                  onSave={(key) => {
+                    updateSettings({ anthropicApiKey: key });
+                    syncToCloud({ anthropic_api_key: key });
+                  }}
+                  onRemove={() => {
+                    updateSettings({ anthropicApiKey: "" });
+                    syncToCloud({ anthropic_api_key: "" });
                   }}
                 />
               </div>

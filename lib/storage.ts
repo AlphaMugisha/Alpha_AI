@@ -50,6 +50,8 @@ export const settingsStorage = {
     getItem<UserSettings>(KEYS.SETTINGS, {
       geminiApiKey: "",
       openaiApiKey: "",
+      anthropicApiKey: "",
+      groqApiKey: "",
       aiProvider: "gemini",
       theme: "system",
       defaultDifficulty: "intermediate",

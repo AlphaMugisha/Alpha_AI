@@ -28,12 +28,33 @@ const SECTION_B_COUNT = 5;
 const SECTION_B_MARKS = 3;
 
 function extractJson(text: string): string {
-  // Prefer a fenced block, otherwise the first {...} object.
+  // Prefer a fenced block, otherwise the outermost {...} object.
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
   const obj = text.match(/\{[\s\S]*\}/);
   if (obj) return obj[0];
   throw new Error("No JSON found in response");
+}
+
+// Tolerant parse: JSON mode usually returns clean JSON, but fall back to
+// extracting/repairing if the model wrapped or lightly truncated it.
+function parseJsonLoose<T>(text: string): T {
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    /* try extraction below */
+  }
+  const candidate = extractJson(text);
+  try {
+    return JSON.parse(candidate) as T;
+  } catch {
+    // Last resort: trim to the last complete object/array close and retry.
+    const lastBrace = Math.max(candidate.lastIndexOf("}"), candidate.lastIndexOf("]"));
+    if (lastBrace > 0) {
+      return JSON.parse(candidate.slice(0, lastBrace + 1)) as T;
+    }
+    throw new Error("Unparseable JSON");
+  }
 }
 
 function ask(config: AIConfig, prompt: string, systemPrompt: string) {
@@ -105,8 +126,12 @@ ${content.slice(0, 16000)}`;
 
   let raw: RawExam;
   try {
-    raw = JSON.parse(extractJson(text)) as RawExam;
+    raw = parseJsonLoose<RawExam>(text);
   } catch {
+    // Surface the raw response in the console to make diagnosis possible.
+    if (typeof console !== "undefined") {
+      console.error("Exam JSON parse failed. Raw model response:\n", text);
+    }
     throw new Error("Failed to parse the exam. Please try again.");
   }
 
@@ -192,9 +217,7 @@ ${payload}`;
 
   const text = await ask(config, prompt, system);
   try {
-    const parsed = JSON.parse(extractJson(text)) as {
-      grades?: ShortGradeResult[];
-    };
+    const parsed = parseJsonLoose<{ grades?: ShortGradeResult[] }>(text);
     const grades = parsed.grades ?? [];
     return items.map((it, i) => {
       const g = grades[i];
@@ -237,7 +260,7 @@ Return ONLY: {"awarded": number, "feedback": "one sentence justifying the decisi
 
   const text = await ask(config, prompt, system);
   try {
-    const g = JSON.parse(extractJson(text)) as ShortGradeResult;
+    const g = parseJsonLoose<ShortGradeResult>(text);
     const awarded = Math.max(0, Math.min(item.marks, Number(g?.awarded ?? item.previous)));
     return { awarded, feedback: g?.feedback ?? "Reviewed." };
   } catch {

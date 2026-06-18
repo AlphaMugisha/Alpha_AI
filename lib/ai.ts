@@ -1,11 +1,14 @@
 import { AIConfig, QuizQuestion, Flashcard, Difficulty } from "@/types";
 import * as gemini from "./gemini";
 import * as openaiLib from "./openai";
+import * as anthropicLib from "./anthropic";
+import * as groqLib from "./groq";
 import { friendlyAIError } from "./aiErrors";
 
 type GeminiHistory = { role: "user" | "model"; parts: { text: string }[] }[];
 
-function toOpenAIMessages(history: GeminiHistory) {
+// Both OpenAI and Anthropic use the same {role:"user"|"assistant", content} shape.
+function toChatMessages(history: GeminiHistory) {
   return history.map((m) => ({
     role: m.role === "model" ? ("assistant" as const) : ("user" as const),
     content: m.parts[0].text,
@@ -17,7 +20,7 @@ async function run<T>(provider: AIConfig["provider"], fn: () => Promise<T>): Pro
   try {
     return await fn();
   } catch (err) {
-    throw friendlyAIError(err, provider === "openai" ? "openai" : "gemini");
+    throw friendlyAIError(err, provider);
   }
 }
 
@@ -28,8 +31,12 @@ export async function generateChatResponse(
 ): Promise<string> {
   return run(config.provider, () =>
     config.provider === "openai"
-      ? openaiLib.generateChatResponse(config.apiKey, toOpenAIMessages(history), systemPrompt)
-      : gemini.generateChatResponse(config.apiKey, history, systemPrompt)
+      ? openaiLib.generateChatResponse(config.apiKey, toChatMessages(history), systemPrompt)
+      : config.provider === "anthropic"
+        ? anthropicLib.generateChatResponse(config.apiKey, toChatMessages(history), systemPrompt)
+        : config.provider === "groq"
+          ? groqLib.generateChatResponse(config.apiKey, toChatMessages(history), systemPrompt)
+          : gemini.generateChatResponse(config.apiKey, history, systemPrompt)
   );
 }
 
@@ -42,7 +49,11 @@ export async function generateStructured(
   return run(config.provider, () =>
     config.provider === "openai"
       ? openaiLib.generateJSON(config.apiKey, prompt, systemPrompt)
-      : gemini.generateJSON(config.apiKey, prompt, systemPrompt)
+      : config.provider === "anthropic"
+        ? anthropicLib.generateJSON(config.apiKey, prompt, systemPrompt)
+        : config.provider === "groq"
+          ? groqLib.generateJSON(config.apiKey, prompt, systemPrompt)
+          : gemini.generateJSON(config.apiKey, prompt, systemPrompt)
   );
 }
 
@@ -54,7 +65,11 @@ export async function generateNotes(
   return run(config.provider, () =>
     config.provider === "openai"
       ? openaiLib.generateNotes(config.apiKey, content, title)
-      : gemini.generateNotes(config.apiKey, content, title)
+      : config.provider === "anthropic"
+        ? anthropicLib.generateNotes(config.apiKey, content, title)
+        : config.provider === "groq"
+          ? groqLib.generateNotes(config.apiKey, content, title)
+          : gemini.generateNotes(config.apiKey, content, title)
   );
 }
 
@@ -66,7 +81,11 @@ export async function generateQuiz(
   return run(config.provider, () =>
     config.provider === "openai"
       ? openaiLib.generateQuiz(config.apiKey, content, numQuestions)
-      : gemini.generateQuiz(config.apiKey, content, numQuestions)
+      : config.provider === "anthropic"
+        ? anthropicLib.generateQuiz(config.apiKey, content, numQuestions)
+        : config.provider === "groq"
+          ? groqLib.generateQuiz(config.apiKey, content, numQuestions)
+          : gemini.generateQuiz(config.apiKey, content, numQuestions)
   );
 }
 
@@ -78,7 +97,11 @@ export async function generateFlashcards(
   return run(config.provider, () =>
     config.provider === "openai"
       ? openaiLib.generateFlashcards(config.apiKey, content, numCards)
-      : gemini.generateFlashcards(config.apiKey, content, numCards)
+      : config.provider === "anthropic"
+        ? anthropicLib.generateFlashcards(config.apiKey, content, numCards)
+        : config.provider === "groq"
+          ? groqLib.generateFlashcards(config.apiKey, content, numCards)
+          : gemini.generateFlashcards(config.apiKey, content, numCards)
   );
 }
 
@@ -91,7 +114,11 @@ export async function explainTopic(
   return run(config.provider, () =>
     config.provider === "openai"
       ? openaiLib.explainTopic(config.apiKey, topic, difficulty, additionalContext)
-      : gemini.explainTopic(config.apiKey, topic, difficulty, additionalContext)
+      : config.provider === "anthropic"
+        ? anthropicLib.explainTopic(config.apiKey, topic, difficulty, additionalContext)
+        : config.provider === "groq"
+          ? groqLib.explainTopic(config.apiKey, topic, difficulty, additionalContext)
+          : gemini.explainTopic(config.apiKey, topic, difficulty, additionalContext)
   );
 }
 
@@ -105,6 +132,10 @@ export async function generateStudyPlan(
   return run(config.provider, () =>
     config.provider === "openai"
       ? openaiLib.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
-      : gemini.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
+      : config.provider === "anthropic"
+        ? anthropicLib.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
+        : config.provider === "groq"
+          ? groqLib.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
+          : gemini.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
   );
 }
