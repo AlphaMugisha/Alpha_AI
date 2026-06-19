@@ -3,6 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const PROTECTED = [
   "/dashboard",
+  "/coach",
+  "/achievements",
   "/chat",
   "/notes",
   "/quiz",

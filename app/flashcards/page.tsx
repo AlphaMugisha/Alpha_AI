@@ -84,8 +84,20 @@ export default function FlashcardsPage() {
   const [numCards, setNumCards] = useState("15");
   const [uploadedFile, setUploadedFile] = useState<{ name: string; content: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const studyStartRef = useRef(0);
+  const studyLoggedRef = useRef(false);
 
   const refreshDecks = async () => setDecks(await flashcardDb.getAll());
+
+  // Log a flashcard study session (once) with the real time spent studying.
+  const finishStudySession = () => {
+    if (studyLoggedRef.current || !studyDeck) return;
+    studyLoggedRef.current = true;
+    const minutes = studyStartRef.current
+      ? Math.max(1, Math.round((Date.now() - studyStartRef.current) / 60000))
+      : 1;
+    addSession("flashcards", `Studied: ${studyDeck.title}`, { duration: minutes });
+  };
 
   useEffect(() => {
     refreshDecks().catch(() => {});
@@ -137,6 +149,8 @@ export default function FlashcardsPage() {
     setShuffled([...deck.cards]);
     setCardIndex(0);
     setMode("study");
+    studyStartRef.current = Date.now();
+    studyLoggedRef.current = false;
   };
 
   const shuffleDeck = () => {
@@ -173,7 +187,14 @@ export default function FlashcardsPage() {
               <Button variant="outline" size="sm" onClick={shuffleDeck}>
                 <Shuffle className="w-4 h-4 mr-2" /> Shuffle
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setMode("list")}>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  finishStudySession();
+                  setMode("list");
+                }}
+              >
                 <X className="w-4 h-4 mr-2" /> Exit
               </Button>
             </div>
@@ -213,7 +234,7 @@ export default function FlashcardsPage() {
             </Button>
             {cardIndex === shuffled.length - 1 ? (
               <Button
-                onClick={() => { setCardIndex(0); toast.success("Deck complete! Starting over..."); }}
+                onClick={() => { finishStudySession(); setCardIndex(0); toast.success("Deck complete! Starting over..."); }}
                 className="bg-gradient-to-r from-violet-600 to-indigo-600"
               >
                 <RotateCcw className="w-4 h-4 mr-2" /> Restart Deck

@@ -56,6 +56,7 @@ export default function QuizPage() {
   const [prefilling, setPrefilling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const autoNoteRef = useRef(false);
+  const quizStartRef = useRef(0);
 
   const refreshQuizzes = async () => {
     setQuizzes(await quizDb.getAll());
@@ -147,6 +148,7 @@ export default function QuizPage() {
     setCurrentQ(0);
     setSelectedAnswers(new Array(quiz.questions.length).fill(null));
     setMode("taking");
+    quizStartRef.current = Date.now();
   };
 
   const selectAnswer = (optionIndex: number) => {
@@ -170,6 +172,15 @@ export default function QuizPage() {
       completedAt: new Date(),
     };
     quizDb.saveResult(result).catch(() => {});
+    // Log the completion with its score so gamification can award the
+    // high-score bonus and count it toward quiz goals/achievements.
+    const pct = currentQuiz.questions.length
+      ? Math.round((score / currentQuiz.questions.length) * 100)
+      : 0;
+    const minutes = quizStartRef.current
+      ? Math.max(1, Math.round((Date.now() - quizStartRef.current) / 60000))
+      : undefined;
+    addSession("quiz", `Completed: ${currentQuiz.title}`, { score: pct, duration: minutes });
     setMode("results");
   };
 

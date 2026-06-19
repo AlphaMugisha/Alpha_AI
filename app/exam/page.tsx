@@ -259,7 +259,10 @@ export default function ExamPage() {
           })
           .catch(() => {});
       }
-      addSession("quiz", `Exam: ${activeExam.title}`);
+      addSession("quiz", `Exam: ${activeExam.title}`, {
+        score: percentage,
+        duration: Math.max(1, Math.round((totalSeconds - timeLeft) / 60)),
+      });
 
       setGrading(false);
       setPhase("results");

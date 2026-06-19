@@ -16,6 +16,8 @@ import {
   Settings,
   GraduationCap,
   ClipboardCheck,
+  Sparkles,
+  Trophy,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -37,7 +39,11 @@ const navSections: {
 }[] = [
   {
     label: null,
-    items: [{ href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" }],
+    items: [
+      { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+      { href: "/coach", icon: Sparkles, label: "Jarvis" },
+      { href: "/achievements", icon: Trophy, label: "Progress" },
+    ],
   },
   {
     label: "Learn",

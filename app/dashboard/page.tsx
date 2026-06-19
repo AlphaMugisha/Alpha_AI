@@ -27,6 +27,8 @@ import Link from "next/link";
 import { timeAgo } from "@/lib/utils";
 import { StudySession } from "@/types";
 import { CommitGoalWidget } from "@/components/github/CommitGoalWidget";
+import { CoachCard } from "@/components/coach/CoachCard";
+import { StatsStrip } from "@/components/gamification/StatsStrip";
 import { NewRepoPrompt } from "@/components/github/NewRepoPrompt";
 import { LiveClock } from "@/components/dashboard/LiveClock";
 import { RotatingQuote } from "@/components/dashboard/RotatingQuote";
@@ -157,6 +159,12 @@ export default function DashboardPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Gamification — level, streak, achievements, weekly progress */}
+        <StatsStrip />
+
+        {/* AI Study Coach — personalised guidance from real study data */}
+        <CoachCard />
 
         {/* New repo detector — pops a prompt when GitHub has repos Alpha hasn't seen */}
         <NewRepoPrompt />

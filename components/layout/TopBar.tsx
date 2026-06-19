@@ -1,15 +1,19 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Moon, Sun, Bell, Search } from "lucide-react";
+import { Moon, Sun, Bell, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { UserMenu } from "@/components/auth/UserMenu";
+import { useJarvis } from "@/context/JarvisContext";
+import { cn } from "@/lib/utils";
 
 const PAGE_TITLES: Record<string, string> = {
   "/dashboard": "Dashboard",
+  "/coach": "Jarvis — AI Study Coach",
+  "/achievements": "Progress & Achievements",
   "/chat": "AI Chat",
   "/notes": "Notes Generator",
   "/quiz": "Quiz Generator",
@@ -26,6 +30,7 @@ export function TopBar() {
   const { theme, setTheme } = useTheme();
   const pathname = usePathname();
   const [showSearch, setShowSearch] = useState(false);
+  const jarvis = useJarvis();
 
   const title = PAGE_TITLES[pathname] || "Alpha";
 
@@ -54,6 +59,23 @@ export function TopBar() {
 
         <Button variant="ghost" size="icon" className="h-8 w-8">
           <Bell className="h-4 w-4" />
+        </Button>
+
+        {/* Jarvis — always one tap away from any page */}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={jarvis.toggle}
+          title="Talk to Jarvis"
+          className={cn(
+            "h-8 w-8 relative",
+            jarvis.open && "text-violet-600 dark:text-violet-400"
+          )}
+        >
+          <Sparkles className="h-4 w-4" />
+          {jarvis.open && (
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 ring-2 ring-card" />
+          )}
         </Button>
 
         <Button

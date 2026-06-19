@@ -3,6 +3,7 @@ import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "sonner";
 import { AuthProvider } from "@/context/AuthContext";
+import { JarvisProvider } from "@/context/JarvisContext";
 
 export const metadata: Metadata = {
   title: "Alpha — Study Smarter with AI",
@@ -26,8 +27,10 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            {children}
-            <Toaster richColors position="top-right" />
+            <JarvisProvider>
+              {children}
+              <Toaster richColors position="top-right" />
+            </JarvisProvider>
           </AuthProvider>
         </ThemeProvider>
       </body>

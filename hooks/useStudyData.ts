@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { sessionDb } from "@/lib/db";
 import { StudySession } from "@/types";
+import { awardForActivity } from "@/lib/gamification/award";
 import { useAuth } from "./useAuth";
 
 async function countRows(table: string): Promise<number> {
@@ -72,6 +73,8 @@ export function useStudyData() {
           createdAt: new Date(),
           ...extra,
         });
+        // Award XP / streak / achievements for this activity (best-effort).
+        await awardForActivity(type, { score: extra?.score });
         await refresh();
       } catch {
         // ignore — activity logging is best-effort
