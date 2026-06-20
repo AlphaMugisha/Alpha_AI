@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
+import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateQuiz } from "@/lib/ai";
 import { parseFile, validateFile } from "@/lib/fileParser";
 import { quizDb, notesDb } from "@/lib/db";
@@ -65,6 +66,8 @@ export default function QuizPage() {
   useEffect(() => {
     refreshQuizzes().catch(() => {});
   }, []);
+
+  useJarvisRefresh(() => refreshQuizzes().catch(() => {}));
 
   // Deep link from a note: /quiz?note=<id> — auto-build a quiz from that lesson and start it.
   useEffect(() => {

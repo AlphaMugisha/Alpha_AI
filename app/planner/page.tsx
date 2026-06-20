@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
+import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateStudyPlan } from "@/lib/ai";
 import { taskDb } from "@/lib/db";
 import { generateId, formatDate } from "@/lib/utils";
@@ -70,6 +71,8 @@ export default function PlannerPage() {
   useEffect(() => {
     refreshTasks().catch(() => {});
   }, []);
+
+  useJarvisRefresh(() => refreshTasks().catch(() => {}));
 
   const addTask = async () => {
     if (!newTask.title || !newTask.subject || !newTask.dueDate) {

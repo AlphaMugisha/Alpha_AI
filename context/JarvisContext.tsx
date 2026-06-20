@@ -8,13 +8,15 @@ import {
   useRef,
   useCallback,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useSettings } from "@/hooks/useSettings";
-import { useSpeechSynthesis, useSpeechRecognition } from "@/hooks/useSpeech";
+import { useSpeechRecognition } from "@/hooks/useSpeech";
+import { useVoice } from "@/hooks/useVoice";
 import { useWakeWord } from "@/hooks/useWakeWord";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { describeScreen } from "@/lib/jarvis/screen";
+import type { Inventory } from "@/lib/jarvis/actions";
 import { toast } from "sonner";
 import dynamic from "next/dynamic";
 
@@ -77,6 +79,7 @@ export function JarvisProvider({ children }: { children: React.ReactNode }) {
   const { user, profile } = useAuth();
   const { aiConfig, hasApiKey } = useSettings();
   const pathname = usePathname();
+  const router = useRouter();
   const firstName = profile?.full_name?.trim().split(" ")[0] ?? null;
 
   const [open, setOpenState] = useState(false);
@@ -90,6 +93,11 @@ export function JarvisProvider({ children }: { children: React.ReactNode }) {
 
   const snapshotPromptRef = useRef<string | null>(null);
   const memoryRef = useRef<string[]>([]);
+  // Jarvis's "hands": the lazily-loaded actions module, a live inventory of the
+  // user's items (for resolving names → ids), and its prompt-formatted form.
+  const actionsModRef = useRef<typeof import("@/lib/jarvis/actions") | null>(null);
+  const inventoryRef = useRef<Inventory | null>(null);
+  const inventoryPromptRef = useRef<string | null>(null);
   const greetedRef = useRef(false);
   const askRef = useRef<(t: string) => void>(() => {});
   const messagesRef = useRef<Msg[]>([]);
@@ -101,7 +109,7 @@ export function JarvisProvider({ children }: { children: React.ReactNode }) {
   const gotFinalRef = useRef(false);
   const startListenRef = useRef<() => void>(() => {});
 
-  const tts = useSpeechSynthesis();
+  const tts = useVoice();
   const stt = useSpeechRecognition({
     onFinal: (t) => {
       gotFinalRef.current = true;
@@ -142,6 +150,8 @@ export function JarvisProvider({ children }: { children: React.ReactNode }) {
     initPromiseRef.current = null;
     snapshotPromptRef.current = null;
     memoryRef.current = [];
+    inventoryRef.current = null;
+    inventoryPromptRef.current = null;
     if (!user) {
       setLive(false);
       setOpenState(false);
@@ -158,19 +168,24 @@ export function JarvisProvider({ children }: { children: React.ReactNode }) {
     if (initPromiseRef.current) return initPromiseRef.current;
     initPromiseRef.current = (async () => {
       try {
-        const [memMod, dbMod, analyticsMod] = await Promise.all([
+        const [memMod, dbMod, analyticsMod, actionsMod] = await Promise.all([
           import("@/lib/jarvis/memory"),
           import("@/lib/coach/db"),
           import("@/lib/coach/analytics"),
+          import("@/lib/jarvis/actions"),
         ]);
-        const [facts, raw] = await Promise.all([
+        actionsModRef.current = actionsMod;
+        const [facts, raw, inventory] = await Promise.all([
           memMod.getJarvisMemory(),
           dbMod.loadCoachData(firstName),
+          actionsMod.loadInventory(),
         ]);
         memoryRef.current = facts;
         snapshotPromptRef.current = analyticsMod.snapshotToPrompt(
           analyticsMod.computeSnapshot(raw)
         );
+        inventoryRef.current = inventory;
+        inventoryPromptRef.current = actionsMod.inventoryToPrompt(inventory);
       } catch {
         // best-effort context
       }
@@ -182,25 +197,41 @@ export function JarvisProvider({ children }: { children: React.ReactNode }) {
     const screen = describeScreen(pathname || "");
     const facts = memoryRef.current;
     const snap = snapshotPromptRef.current;
-    return `You are JARVIS — the user's witty, loyal AI companion, inspired by Tony Stark's assistant. You're a friend first, a tutor when needed.
+    const actionsPrompt = actionsModRef.current?.ACTIONS_PROMPT ?? "";
+    const inventory = inventoryPromptRef.current;
+    return `You are JARVIS — ${firstName || "the user"}'s personal AI companion and mentor, inspired by Tony Stark's assistant. You're a friend first, a sharp tutor when needed, and a proactive helper who quietly takes care of things. You are NOT a chatbot, a command parser, or a search engine.
 
 Personality:
 - Warm, clever, quick-witted. You enjoy friendly banter and light jokes, and you can be playfully sarcastic in a kind way.
-- You genuinely care about ${firstName || "the user"}. Talk like a real friend, not a corporate bot.
-- You can chat about ANYTHING — jokes, life, motivation, random questions — not just studying. If they just want to talk or joke around, do it. When they want help with study, switch smoothly into a sharp, helpful tutor.
+- You genuinely care about ${firstName || "the user"}. Talk like a real person who knows them, not a corporate bot.
+- You can chat about ANYTHING — jokes, life, motivation, random questions — not just studying. When they want help studying or want something done in the app, switch smoothly into a sharp, capable assistant.
+- Be proactive: if something obviously needs doing or following up, offer it or just do it.
 
-Voice rules (you are spoken aloud):
-- Keep replies SHORT and natural — usually 1 to 3 sentences. No markdown, no bullet lists, no headings, no emojis.
-- Be specific and human. Use real details below when relevant; never invent facts, scores, or events.
+How to understand what they mean (MOST IMPORTANT):
+- Listen for INTENT, not exact words. People speak casually, with typos, slang, half-sentences and vague phrasing — understand the meaning behind it, like a smart human assistant would.
+- Map natural descriptions to the real thing. "my bio cards" / "that deck" / "the flashcards from earlier" all mean a flashcard deck in their items below — match it by meaning, not by an exact string. "the planner thing", "my to-dos", "tasks" all mean study tasks. "make a test on X" means create a quiz.
+- Resolve references from context: "that", "it", "this one", "the thing we just did", "the one from earlier" usually refer to the most recent thing in THIS conversation or the screen they're on. Use the conversation so far and their current screen to figure out the target.
+- "open / show / take me to / go to / where's the …" means navigate to that page, even if they don't use its exact name (e.g. "where I make notes" → notes page).
+- Make a confident, reasonable assumption when you're fairly sure what they mean, and just act — then briefly say what you did so they can correct you. Only ask a clarifying question when there are genuinely multiple distinct things it could be and guessing wrong would be costly. Never reply by asking them for exact names, IDs, or technical terms.
+- If they refer to something that doesn't exist in their items, say so plainly and offer to create it, rather than inventing it.
+
+Voice rules (you are spoken aloud through a natural voice):
+- Keep replies SHORT and conversational — usually 1 to 3 sentences. No markdown, no bullet lists, no headings, no emojis, no code, no reading out IDs or JSON.
+- Sound human: natural rhythm, contractions, the occasional warm aside. Be specific using the real details below; never invent facts, scores, or events.
 
 Where they are right now:
-- The user is on the ${screen.name} screen (${screen.desc}). You can reference this naturally.
+- The user is on the ${screen.name} screen (${screen.desc}). Use this to resolve vague references ("this page", "this section", "fix this") and to act in context.
 
 What you know about ${firstName || "the user"}:
 ${facts.length ? facts.map((f) => `- ${f}`).join("\n") : "- (You're still getting to know them — be curious.)"}
 
 Their study data (use only when relevant):
-${snap ?? "Not loaded yet."}`;
+${snap ?? "Not loaded yet."}
+
+The user's current items (refer to these by their exact names when acting on them):
+${inventory ?? "Not loaded yet."}
+
+${actionsPrompt}`;
   }, [pathname, firstName]);
 
   const ask = useCallback(
@@ -211,21 +242,52 @@ ${snap ?? "Not loaded yet."}`;
         toast.error("Add an AI API key in Settings so Jarvis can talk back.");
         return;
       }
-      ensureContext();
       const next: Msg[] = [...messagesRef.current, { role: "user", text: clean }];
       setMessages(next);
       setThinking(true);
       try {
+        // Make sure Jarvis's capabilities + the user's live inventory are loaded
+        // before we build the prompt (cached after the first call, so cheap).
+        await ensureContext();
         const { generateChatResponse } = await import("@/lib/ai");
-        const history: GeminiHistory = next.slice(-12).map((m) => ({
+        const history: GeminiHistory = next.slice(-16).map((m) => ({
           role: m.role === "assistant" ? "model" : "user",
           parts: [{ text: m.text }],
         }));
         const reply = await generateChatResponse(aiConfig, history, buildSystemPrompt());
-        setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
+
+        // Split the spoken reply from any action block Jarvis appended, then
+        // carry out those actions against the app's data layer.
+        const actionsMod =
+          actionsModRef.current ?? (await import("@/lib/jarvis/actions"));
+        actionsModRef.current = actionsMod;
+        const { say, actions } = actionsMod.parseActions(reply);
+
+        const display = say || (actions.length ? "" : reply);
+        if (display) setMessages((prev) => [...prev, { role: "assistant", text: display }]);
+
+        let spoken = say;
+        if (actions.length) {
+          const inv = inventoryRef.current ?? (await actionsMod.loadInventory());
+          inventoryRef.current = inv;
+          const results = await actionsMod.executeActions(actions, inv, {
+            aiConfig,
+            navigate: (route) => router.push(route),
+          });
+          inventoryPromptRef.current = actionsMod.inventoryToPrompt(inv);
+          const summary = results.join(" ");
+          if (summary) {
+            setMessages((prev) => [...prev, { role: "assistant", text: summary }]);
+          }
+          spoken = [say, summary].filter(Boolean).join(" ");
+          // Let any open page know its data changed so it can refresh in place.
+          window.dispatchEvent(new CustomEvent("jarvis:changed"));
+        }
+        if (!spoken) spoken = reply;
+
         // In live mode, listen again after Jarvis finishes speaking (or right
         // away when muted) so the conversation flows without tapping anything.
-        if (autoSpeak) tts.speak(reply, { rate: 1.03, onEnd: continueLive });
+        if (autoSpeak) tts.speak(spoken, { rate: 1.03, onEnd: continueLive });
         else window.setTimeout(continueLive, 300);
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Jarvis couldn't respond.");
@@ -233,7 +295,7 @@ ${snap ?? "Not loaded yet."}`;
         setThinking(false);
       }
     },
-    [thinking, hasApiKey, ensureContext, aiConfig, buildSystemPrompt, autoSpeak, tts, continueLive]
+    [thinking, hasApiKey, ensureContext, aiConfig, buildSystemPrompt, autoSpeak, tts, continueLive, router]
   );
 
   messagesRef.current = messages;

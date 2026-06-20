@@ -41,6 +41,7 @@ import { PageHeader } from "@/components/shared/PageHeader";
 import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { GithubSettings } from "@/components/github/GithubSettings";
+import { VoiceSettings } from "@/components/settings/VoiceSettings";
 
 const PROVIDERS = [
   {
@@ -375,6 +376,11 @@ export default function SettingsPage() {
         {/* GitHub */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }}>
           <GithubSettings />
+        </motion.div>
+
+        {/* Jarvis voice */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.09 }}>
+          <VoiceSettings />
         </motion.div>
 
         {/* Appearance */}

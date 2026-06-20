@@ -57,6 +57,8 @@ export const settingsStorage = {
       defaultDifficulty: "intermediate",
       notificationsEnabled: true,
       dailyGoalMinutes: 60,
+      elevenLabsApiKey: "",
+      elevenLabsVoiceId: "",
     }),
   set: (settings: UserSettings) => setItem(KEYS.SETTINGS, settings),
   getApiKey: (): string => {

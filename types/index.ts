@@ -152,6 +152,10 @@ export interface UserSettings {
   defaultDifficulty: "beginner" | "intermediate" | "advanced";
   notificationsEnabled: boolean;
   dailyGoalMinutes: number;
+  // Jarvis voice (ElevenLabs neural TTS). When the key is empty, Jarvis falls
+  // back to the browser's built-in speech synthesis.
+  elevenLabsApiKey: string;
+  elevenLabsVoiceId: string;
 }
 
 export interface StudyAnalytics {

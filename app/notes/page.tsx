@@ -6,6 +6,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
+import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateNotes } from "@/lib/ai";
 import { parseFile, validateFile } from "@/lib/fileParser";
 import { notesDb, coursesDb } from "@/lib/db";
@@ -73,6 +74,11 @@ export default function NotesPage() {
     refreshNotes().catch(() => {});
     coursesDb.getAll().then(setCourses).catch(() => {});
   }, []);
+
+  useJarvisRefresh(() => {
+    refreshNotes().catch(() => {});
+    coursesDb.getAll().then(setCourses).catch(() => {});
+  });
 
   useEffect(() => {
     if (!fullscreen) return;

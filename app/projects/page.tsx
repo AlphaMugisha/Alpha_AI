@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { projectDb, projectTaskDb } from "@/lib/db";
+import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { importProjectRepos } from "@/app/actions/github";
 import { generateId, formatDate } from "@/lib/utils";
 import { CodingProject, ProjectStatus } from "@/types";
@@ -147,6 +148,8 @@ export default function ProjectsPage() {
   useEffect(() => {
     refresh();
   }, []);
+
+  useJarvisRefresh(() => refresh());
 
   const detail = useMemo(
     () => projects.find((p) => p.id === detailId) ?? null,

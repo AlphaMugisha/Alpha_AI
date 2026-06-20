@@ -5,6 +5,7 @@ import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
+import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateFlashcards } from "@/lib/ai";
 import { flashcardDb } from "@/lib/db";
 import { generateId, formatDate } from "@/lib/utils";
@@ -88,6 +89,8 @@ export default function FlashcardsPage() {
   const studyLoggedRef = useRef(false);
 
   const refreshDecks = async () => setDecks(await flashcardDb.getAll());
+
+  useJarvisRefresh(() => refreshDecks().catch(() => {}));
 
   // Log a flashcard study session (once) with the real time spent studying.
   const finishStudySession = () => {

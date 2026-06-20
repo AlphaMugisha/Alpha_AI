@@ -15,6 +15,8 @@ const DEFAULT_SETTINGS: UserSettings = {
   defaultDifficulty: "intermediate",
   notificationsEnabled: true,
   dailyGoalMinutes: 60,
+  elevenLabsApiKey: "",
+  elevenLabsVoiceId: "",
 };
 
 export function useSettings() {
