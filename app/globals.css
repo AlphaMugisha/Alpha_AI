@@ -106,6 +106,46 @@ html {
   scroll-behavior: smooth;
 }
 
+/* ---- Custom scrollbar (sidebar, lists, page) ---- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary) / 0.35) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background-color: hsl(var(--primary) / 0.3);
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.55);
+}
+
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Slim, gradient scrollbar for the Radix ScrollArea thumb */
+.scroll-thumb-gradient {
+  background-image: linear-gradient(
+    to bottom,
+    hsl(262 83% 62%),
+    hsl(238 82% 60%)
+  );
+}
+
 .prose {
   @apply max-w-none text-foreground leading-relaxed;
 }
