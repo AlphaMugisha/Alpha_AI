@@ -102,7 +102,7 @@ export function Sidebar() {
         className="relative flex flex-col border-r bg-card/50 backdrop-blur-sm min-h-screen shrink-0"
       >
         <div className="flex items-center justify-between p-4 border-b">
-          {!collapsed && (
+          {expanded ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -114,31 +114,33 @@ export function Sidebar() {
               </div>
               <span className="font-bold text-sm gradient-text">Alpha</span>
             </motion.div>
-          )}
-          {collapsed && (
+          ) : (
             <div className="w-7 h-7 mx-auto rounded-lg bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center">
               <GraduationCap className="w-4 h-4 text-white" />
             </div>
           )}
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("h-7 w-7 shrink-0", collapsed && "mx-auto mt-1")}
-            onClick={() => setCollapsed(!collapsed)}
-          >
-            {collapsed ? (
-              <ChevronRight className="h-3.5 w-3.5" />
-            ) : (
-              <ChevronLeft className="h-3.5 w-3.5" />
-            )}
-          </Button>
+          {expanded && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 shrink-0"
+              onClick={() => setCollapsed(!collapsed)}
+              title={collapsed ? "Pin sidebar open" : "Unpin (collapse)"}
+            >
+              {collapsed ? (
+                <ChevronRight className="h-3.5 w-3.5" />
+              ) : (
+                <ChevronLeft className="h-3.5 w-3.5" />
+              )}
+            </Button>
+          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2 space-y-1">
           {navSections.map((section, si) => (
             <div key={si} className={cn(si > 0 && "pt-3")}>
               {section.label &&
-                (collapsed ? (
+                (!expanded ? (
                   <div className="mx-2 mb-1 border-t border-border/60" />
                 ) : (
                   <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
