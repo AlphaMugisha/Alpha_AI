@@ -34,6 +34,21 @@ export async function signIn(formData: FormData) {
   redirect("/dashboard");
 }
 
+export async function signInWithProvider(provider: "google" | "facebook") {
+  const supabase = await createClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider,
+    options: {
+      redirectTo: `${siteUrl}/auth/callback?next=/dashboard`,
+    },
+  });
+
+  if (error) return { error: error.message };
+  if (data?.url) redirect(data.url);
+}
+
 export async function signUp(formData: FormData) {
   const supabase = await createClient();
   const email = ((formData.get("email") as string) || "").trim();
