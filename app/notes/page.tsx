@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
@@ -10,7 +10,7 @@ import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateNotes } from "@/lib/ai";
 import { parseFile, validateFile } from "@/lib/fileParser";
 import { notesDb, coursesDb } from "@/lib/db";
-import { generateId, formatDate, truncate, formatFileSize } from "@/lib/utils";
+import { generateId, formatDate, formatFileSize } from "@/lib/utils";
 import { Note, Course } from "@/types";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
@@ -29,9 +29,12 @@ import {
   Brain,
   Maximize2,
   Minimize2,
+  ArrowLeft,
+  FolderOpen,
+  GraduationCap,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,26 +46,33 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PageHeader } from "@/components/shared/PageHeader";
-import { EmptyState } from "@/components/shared/EmptyState";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+const UNCATEGORIZED = "__uncategorized__";
 
 export default function NotesPage() {
   const router = useRouter();
   const { aiConfig, hasApiKey } = useSettings();
   const { addSession } = useStudyData();
+
   const [notes, setNotes] = useState<Note[]>([]);
+  const [courses, setCourses] = useState<Course[]>([]);
+
+  // View state: course grid → course detail → note viewer / upload.
+  const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
   const [selectedNote, setSelectedNote] = useState<Note | null>(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // Upload flow.
   const [isGenerating, setIsGenerating] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<{ name: string; size: number; content: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const [courses, setCourses] = useState<Course[]>([]);
   const [courseId, setCourseId] = useState<string>("");
   const [creatingCourse, setCreatingCourse] = useState(false);
   const [newCourseName, setNewCourseName] = useState("");
-  const [fullscreen, setFullscreen] = useState(false);
 
   const refreshNotes = async () => {
     const all = await notesDb.getAll();
@@ -89,8 +99,45 @@ export default function NotesPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [fullscreen]);
 
-  const courseName = (id?: string) =>
-    courses.find((c) => c.id === id)?.name;
+  const courseName = (id?: string | null) =>
+    id === UNCATEGORIZED
+      ? "Uncategorized"
+      : courses.find((c) => c.id === id)?.name;
+
+  // Notes grouped by course, plus an "Uncategorized" bucket for legacy notes.
+  const notesForCourse = (id: string | null) =>
+    id === UNCATEGORIZED
+      ? notes.filter((n) => !n.courseId)
+      : notes.filter((n) => n.courseId === id);
+
+  const courseCards = useMemo(() => {
+    const cards = courses.map((c) => ({
+      id: c.id,
+      name: c.name,
+      count: notes.filter((n) => n.courseId === c.id).length,
+      latest: notes
+        .filter((n) => n.courseId === c.id)
+        .reduce<Date | null>(
+          (m, n) => (!m || n.createdAt > m ? n.createdAt : m),
+          null
+        ),
+    }));
+    const uncategorized = notes.filter((n) => !n.courseId);
+    if (uncategorized.length > 0) {
+      cards.push({
+        id: UNCATEGORIZED,
+        name: "Uncategorized",
+        count: uncategorized.length,
+        latest: uncategorized.reduce<Date | null>(
+          (m, n) => (!m || n.createdAt > m ? n.createdAt : m),
+          null
+        ),
+      });
+    }
+    return cards;
+  }, [courses, notes]);
+
+  const detailNotes = selectedCourseId ? notesForCourse(selectedCourseId) : [];
 
   const createCourse = async () => {
     const name = newCourseName.trim();
@@ -114,10 +161,19 @@ export default function NotesPage() {
     }
   };
 
+  const openUpload = () => {
+    setShowUpload(true);
+    setSelectedNote(null);
+    setUploadedFile(null);
+    // Pre-select the course we're currently inside, for convenience.
+    if (selectedCourseId && selectedCourseId !== UNCATEGORIZED) {
+      setCourseId(selectedCourseId);
+    }
+  };
+
   const handleFile = async (file: File) => {
     const error = validateFile(file);
     if (error) { toast.error(error); return; }
-
     try {
       toast.info("Parsing file...");
       const parsed = await parseFile(file);
@@ -154,10 +210,13 @@ export default function NotesPage() {
       };
       await notesDb.save(note);
       const all = await refreshNotes();
-      setSelectedNote(all.find(n => n.id === note.id) || note);
       addSession("notes", note.title);
       toast.success("Notes generated successfully!");
       setUploadedFile(null);
+      setShowUpload(false);
+      // Drop the user into the course they just added to.
+      setSelectedCourseId(courseId);
+      setSelectedNote(all.find((n) => n.id === note.id) || note);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to generate notes");
     } finally {
@@ -184,6 +243,21 @@ export default function NotesPage() {
     toast.success("Note exported as Markdown");
   };
 
+  const generateExamForAll = () => {
+    if (!selectedCourseId || selectedCourseId === UNCATEGORIZED) return;
+    if (detailNotes.length === 0) {
+      toast.error("Upload some notes for this course first.");
+      return;
+    }
+    if (!hasApiKey) {
+      toast.error("Add your Gemini API key in Settings to generate an exam.");
+      return;
+    }
+    toast.info("Building an exam from every note in this course…");
+    router.push(`/exam?course=${selectedCourseId}&start=1`);
+  };
+
+  // ---------------------------------------------------------------- render
   return (
     <DashboardLayout>
       <PageHeader
@@ -192,244 +266,311 @@ export default function NotesPage() {
         icon={<FileText className="w-5 h-5" />}
       />
 
-      <div className="flex h-[calc(100vh-12rem)] gap-4 -mx-0">
-        {/* Notes list */}
-        <div className="w-72 flex flex-col border rounded-xl bg-card shrink-0">
-          <div className="p-3 border-b">
-            <Button
-              size="sm"
-              className="w-full"
-              onClick={() => { setSelectedNote(null); setUploadedFile(null); }}
-            >
-              <Plus className="w-4 h-4 mr-2" /> New Notes
+      {/* ===================== UPLOAD VIEW ===================== */}
+      {showUpload ? (
+        <div className="border rounded-xl bg-card p-6 sm:p-8">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-lg font-semibold">Upload Study Material</h3>
+            <Button variant="ghost" size="sm" onClick={() => setShowUpload(false)}>
+              <X className="w-4 h-4 mr-2" /> Cancel
             </Button>
           </div>
-          <ScrollArea className="flex-1">
-            {notes.length === 0 ? (
-              <div className="p-6 text-center text-sm text-muted-foreground">
-                <FileText className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                No notes yet. Upload a file to generate your first notes.
-              </div>
-            ) : (
-              <div className="p-2 space-y-1">
-                {notes.map((note) => (
-                  <div
-                    key={note.id}
-                    onClick={() => setSelectedNote(note)}
-                    className={cn(
-                      "group p-3 rounded-lg cursor-pointer transition-colors",
-                      selectedNote?.id === note.id ? "bg-primary/10 border border-primary/20" : "hover:bg-muted"
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium truncate">{note.title}</div>
-                        <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                          <Clock className="w-3 h-3" />
-                          {formatDate(note.createdAt)}
-                        </div>
-                        {note.sourceFile && (
-                          <div className="text-xs text-muted-foreground truncate mt-0.5">
-                            {note.sourceFile}
-                          </div>
-                        )}
-                      </div>
-                      <button
-                        onClick={(e) => deleteNote(note.id, e)}
-                        className="opacity-0 group-hover:opacity-100 p-1 rounded hover:text-destructive"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
+
+          <div className="max-w-xl mx-auto">
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileRef.current?.click()}
+              className={cn(
+                "border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all",
+                dragOver
+                  ? "border-primary bg-primary/5"
+                  : "border-border hover:border-primary/50 hover:bg-muted/50"
+              )}
+            >
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".pdf,.docx,.txt,.md"
+                className="hidden"
+                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+              />
+              <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+              <p className="font-medium mb-1">Drop your file here or click to browse</p>
+              <p className="text-sm text-muted-foreground">PDF, DOCX, TXT, MD · Max 10MB</p>
+            </div>
+
+            <AnimatePresence>
+              {uploadedFile && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mt-4 p-4 bg-muted/50 rounded-xl flex items-center gap-3"
+                >
+                  <File className="w-8 h-8 text-primary shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{uploadedFile.name}</p>
+                    <p className="text-xs text-muted-foreground">{formatFileSize(uploadedFile.size)}</p>
                   </div>
-                ))}
-              </div>
+                  <button onClick={() => setUploadedFile(null)} className="p-1 rounded hover:bg-muted">
+                    <X className="w-4 h-4" />
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Course selection — every uploaded file must belong to a course */}
+            <div className="mt-4">
+              <Label className="text-sm mb-2 block">
+                Which course is this for? <span className="text-destructive">*</span>
+              </Label>
+              {creatingCourse ? (
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus
+                    placeholder="e.g. Full-Stack JavaScript"
+                    value={newCourseName}
+                    onChange={(e) => setNewCourseName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") createCourse();
+                      if (e.key === "Escape") setCreatingCourse(false);
+                    }}
+                  />
+                  <Button onClick={createCourse} disabled={!newCourseName.trim()}>Add</Button>
+                  <Button variant="outline" onClick={() => setCreatingCourse(false)}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Select value={courseId} onValueChange={setCourseId}>
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select a course" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {courses.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No courses yet — add one
+                        </div>
+                      ) : (
+                        courses.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={() => setCreatingCourse(true)}>
+                    <Plus className="w-4 h-4 mr-1" /> New
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <Button
+              onClick={handleGenerate}
+              disabled={!uploadedFile || !courseId || isGenerating || !hasApiKey}
+              className="w-full mt-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+              size="lg"
+            >
+              {isGenerating ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Notes...</>
+              ) : (
+                <><FileText className="w-4 h-4 mr-2" /> Generate AI Notes</>
+              )}
+            </Button>
+
+            {!hasApiKey && (
+              <p className="text-center text-sm text-muted-foreground mt-3">
+                <Link href="/settings" className="text-primary hover:underline">Add your Gemini API key</Link> to generate notes.
+              </p>
             )}
+          </div>
+        </div>
+      ) : selectedNote ? (
+        /* ===================== NOTE VIEWER ===================== */
+        <div className="border rounded-xl bg-card overflow-hidden flex flex-col h-[calc(100vh-12rem)]">
+          <div className="p-4 border-b flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Button variant="ghost" size="sm" onClick={() => setSelectedNote(null)}>
+                <ArrowLeft className="w-4 h-4" />
+              </Button>
+              <div className="min-w-0">
+                <h3 className="font-semibold truncate">{selectedNote.title}</h3>
+                <p className="text-xs text-muted-foreground truncate">
+                  {courseName(selectedNote.courseId) && `${courseName(selectedNote.courseId)} · `}
+                  {formatDate(selectedNote.createdAt)}
+                  {selectedNote.sourceFile && ` · ${selectedNote.sourceFile}`}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button size="sm" variant="outline" onClick={() => setFullscreen(true)} title="Read full screen">
+                <Maximize2 className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => router.push(`/quiz?note=${selectedNote.id}`)}>
+                <Brain className="w-4 h-4 mr-2" /> Make Quiz
+              </Button>
+              <Button
+                size="sm"
+                className="bg-gradient-to-r from-violet-600 to-indigo-600"
+                onClick={() => router.push(`/exam?lesson=${selectedNote.id}`)}
+              >
+                <ClipboardCheck className="w-4 h-4 mr-2" /> Simulate Exam
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => exportNote(selectedNote)} title="Export as Markdown">
+                <Download className="w-4 h-4" />
+              </Button>
+              <Button size="sm" variant="outline" onClick={(e) => deleteNote(selectedNote.id, e)} title="Delete note">
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+          <ScrollArea className="flex-1">
+            <div className="p-6 prose prose-sm dark:prose-invert max-w-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedNote.content}</ReactMarkdown>
+            </div>
           </ScrollArea>
         </div>
-
-        {/* Content area */}
-        <div className="flex-1 min-w-0 border rounded-xl bg-card overflow-hidden flex flex-col">
-          {selectedNote ? (
-            <>
-              <div className="p-4 border-b flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold">{selectedNote.title}</h3>
-                  <p className="text-xs text-muted-foreground">
-                    {courseName(selectedNote.courseId) &&
-                      `${courseName(selectedNote.courseId)} · `}
-                    {formatDate(selectedNote.createdAt)}
-                    {selectedNote.sourceFile && ` · ${selectedNote.sourceFile}`}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setFullscreen(true)}
-                    title="Read full screen"
-                  >
-                    <Maximize2 className="w-4 h-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => router.push(`/quiz?note=${selectedNote.id}`)}
-                  >
-                    <Brain className="w-4 h-4 mr-2" /> Make Quiz
-                  </Button>
-                  <Button
-                    size="sm"
-                    className="bg-gradient-to-r from-violet-600 to-indigo-600"
-                    onClick={() => router.push(`/exam?lesson=${selectedNote.id}`)}
-                  >
-                    <ClipboardCheck className="w-4 h-4 mr-2" /> Simulate Exam
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => exportNote(selectedNote)} title="Export as Markdown">
-                    <Download className="w-4 h-4" />
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={(e) => deleteNote(selectedNote.id, e)} title="Delete note">
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
+      ) : selectedCourseId ? (
+        /* ===================== COURSE DETAIL ===================== */
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <Button variant="ghost" size="sm" onClick={() => setSelectedCourseId(null)}>
+                <ArrowLeft className="w-4 h-4 mr-2" /> All courses
+              </Button>
+              <div className="min-w-0">
+                <h2 className="text-xl font-semibold truncate">{courseName(selectedCourseId)}</h2>
+                <p className="text-sm text-muted-foreground">
+                  {detailNotes.length} {detailNotes.length === 1 ? "note" : "notes"}
+                </p>
               </div>
-              <ScrollArea className="flex-1">
-                <div className="p-6 prose prose-sm dark:prose-invert max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {selectedNote.content}
-                  </ReactMarkdown>
-                </div>
-              </ScrollArea>
-            </>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8">
-              <div className="w-full max-w-xl">
-                <h3 className="text-lg font-semibold mb-4 text-center">Upload Study Material</h3>
-
-                {/* Drop zone */}
-                <div
-                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                  onDragLeave={() => setDragOver(false)}
-                  onDrop={handleDrop}
-                  onClick={() => fileRef.current?.click()}
-                  className={cn(
-                    "border-2 border-dashed rounded-xl p-10 text-center cursor-pointer transition-all",
-                    dragOver
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50 hover:bg-muted/50"
-                  )}
-                >
-                  <input
-                    ref={fileRef}
-                    type="file"
-                    accept=".pdf,.docx,.txt,.md"
-                    className="hidden"
-                    onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-                  />
-                  <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
-                  <p className="font-medium mb-1">Drop your file here or click to browse</p>
-                  <p className="text-sm text-muted-foreground">PDF, DOCX, TXT, MD · Max 10MB</p>
-                </div>
-
-                <AnimatePresence>
-                  {uploadedFile && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="mt-4 p-4 bg-muted/50 rounded-xl flex items-center gap-3"
-                    >
-                      <File className="w-8 h-8 text-primary shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{uploadedFile.name}</p>
-                        <p className="text-xs text-muted-foreground">{formatFileSize(uploadedFile.size)}</p>
-                      </div>
-                      <button onClick={() => setUploadedFile(null)} className="p-1 rounded hover:bg-muted">
-                        <X className="w-4 h-4" />
-                      </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
-                {/* Course selection — every uploaded file must belong to a course */}
-                <div className="mt-4">
-                  <Label className="text-sm mb-2 block">
-                    Which course is this for? <span className="text-destructive">*</span>
-                  </Label>
-                  {creatingCourse ? (
-                    <div className="flex gap-2">
-                      <Input
-                        autoFocus
-                        placeholder="e.g. Full-Stack JavaScript"
-                        value={newCourseName}
-                        onChange={(e) => setNewCourseName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") createCourse();
-                          if (e.key === "Escape") setCreatingCourse(false);
-                        }}
-                      />
-                      <Button onClick={createCourse} disabled={!newCourseName.trim()}>
-                        Add
-                      </Button>
-                      <Button variant="outline" onClick={() => setCreatingCourse(false)}>
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Select value={courseId} onValueChange={setCourseId}>
-                        <SelectTrigger className="flex-1">
-                          <SelectValue placeholder="Select a course" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {courses.length === 0 ? (
-                            <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                              No courses yet — add one
-                            </div>
-                          ) : (
-                            courses.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {c.name}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        variant="outline"
-                        onClick={() => setCreatingCourse(true)}
-                      >
-                        <Plus className="w-4 h-4 mr-1" /> New
-                      </Button>
-                    </div>
-                  )}
-                </div>
-
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={openUpload}>
+                <Plus className="w-4 h-4 mr-2" /> Add notes
+              </Button>
+              {selectedCourseId !== UNCATEGORIZED && (
                 <Button
-                  onClick={handleGenerate}
-                  disabled={!uploadedFile || !courseId || isGenerating || !hasApiKey}
-                  className="w-full mt-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
-                  size="lg"
+                  onClick={generateExamForAll}
+                  disabled={detailNotes.length === 0 || !hasApiKey}
+                  className="bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+                  title={
+                    !hasApiKey
+                      ? "Add your Gemini API key in Settings"
+                      : "Generate one exam covering every note in this course"
+                  }
                 >
-                  {isGenerating ? (
-                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Notes...</>
-                  ) : (
-                    <><FileText className="w-4 h-4 mr-2" /> Generate AI Notes</>
-                  )}
+                  <GraduationCap className="w-4 h-4 mr-2" /> Generate exam for all
                 </Button>
+              )}
+            </div>
+          </div>
 
-                {!hasApiKey && (
-                  <p className="text-center text-sm text-muted-foreground mt-3">
-                    <Link href="/settings" className="text-primary hover:underline">Add your Gemini API key</Link> to generate notes.
-                  </p>
-                )}
-              </div>
+          {detailNotes.length === 0 ? (
+            <div className="border rounded-xl bg-card p-12 text-center">
+              <FileText className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
+              <p className="font-medium mb-1">No notes in this course yet</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Upload study material to start building this course.
+              </p>
+              <Button onClick={openUpload}>
+                <Plus className="w-4 h-4 mr-2" /> Add notes
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {detailNotes.map((note) => (
+                <motion.div
+                  key={note.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => setSelectedNote(note)}
+                  className="group relative border rounded-xl bg-card p-4 cursor-pointer transition-all hover:border-primary/40 hover:shadow-md"
+                >
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-violet-500/15 to-indigo-500/15 flex items-center justify-center shrink-0">
+                      <FileText className="w-5 h-5 text-violet-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium truncate">{note.title}</div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                        <Clock className="w-3 h-3" /> {formatDate(note.createdAt)}
+                      </div>
+                      {note.sourceFile && (
+                        <div className="text-xs text-muted-foreground truncate mt-0.5">
+                          {note.sourceFile}
+                        </div>
+                      )}
+                    </div>
+                    <button
+                      onClick={(e) => deleteNote(note.id, e)}
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded hover:text-destructive transition-opacity"
+                      title="Delete note"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
             </div>
           )}
         </div>
-      </div>
+      ) : (
+        /* ===================== COURSE GRID ===================== */
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold">Your courses</h2>
+            <Button onClick={openUpload}>
+              <Plus className="w-4 h-4 mr-2" /> New Notes
+            </Button>
+          </div>
 
-      {/* Full-screen reading mode */}
+          {courseCards.length === 0 ? (
+            <div className="border rounded-xl bg-card p-12 text-center">
+              <FolderOpen className="w-12 h-12 mx-auto mb-4 text-muted-foreground opacity-40" />
+              <p className="font-medium mb-1">No courses yet</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Upload study material and assign it to a course to get started.
+              </p>
+              <Button onClick={openUpload}>
+                <Upload className="w-4 h-4 mr-2" /> Upload your first file
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {courseCards.map((c) => (
+                <motion.div
+                  key={c.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  onClick={() => setSelectedCourseId(c.id)}
+                  className="group border rounded-xl bg-card p-5 cursor-pointer transition-all hover:border-primary/40 hover:shadow-md"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-sm">
+                      <Layers className="w-6 h-6 text-white" />
+                    </div>
+                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-muted text-muted-foreground">
+                      {c.count} {c.count === 1 ? "note" : "notes"}
+                    </span>
+                  </div>
+                  <h3 className="font-semibold mt-4 truncate group-hover:text-primary transition-colors">
+                    {c.name}
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {c.latest ? `Updated ${formatDate(c.latest)}` : "No notes yet"}
+                  </p>
+                </motion.div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===================== Full-screen reading mode ===================== */}
       <AnimatePresence>
         {fullscreen && selectedNote && (
           <motion.div
@@ -442,8 +583,7 @@ export default function NotesPage() {
               <div className="min-w-0">
                 <h2 className="font-semibold truncate">{selectedNote.title}</h2>
                 <p className="text-xs text-muted-foreground">
-                  {courseName(selectedNote.courseId) &&
-                    `${courseName(selectedNote.courseId)} · `}
+                  {courseName(selectedNote.courseId) && `${courseName(selectedNote.courseId)} · `}
                   {formatDate(selectedNote.createdAt)}
                 </p>
               </div>
@@ -462,9 +602,7 @@ export default function NotesPage() {
             </div>
             <div className="flex-1 overflow-y-auto">
               <div className="mx-auto max-w-3xl px-6 py-10 prose prose-lg dark:prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {selectedNote.content}
-                </ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedNote.content}</ReactMarkdown>
               </div>
             </div>
           </motion.div>

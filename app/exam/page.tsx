@@ -169,15 +169,26 @@ export default function ExamPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // ----- deep link from Notes: /exam?lesson=<id> -----
+  // Auto-start requested via /exam?course=<id>&start=1 (from Notes → "Generate exam for all").
+  const [pendingStart, setPendingStart] = useState(false);
+
+  // ----- deep link from Notes: /exam?lesson=<id> or /exam?course=<id>[&start=1] -----
   useEffect(() => {
     if (notes.length === 0) return;
-    const lid = new URLSearchParams(window.location.search).get("lesson");
+    const params = new URLSearchParams(window.location.search);
+    const lid = params.get("lesson");
+    const cid = params.get("course");
     if (lid) {
       const note = notes.find((n) => n.id === lid);
       setSource("course");
       if (note?.courseId) setCourseId(note.courseId);
       setLessonId(lid);
+    } else if (cid) {
+      // Whole-course exam: select every lesson in the course.
+      setSource("course");
+      setCourseId(cid);
+      setLessonId(ALL_LESSONS);
+      if (params.get("start") === "1") setPendingStart(true);
     }
   }, [notes]);
 
@@ -444,6 +455,15 @@ export default function ExamPage() {
       setBuilding(false);
     }
   };
+
+  // Fire the whole-course exam once the deep-linked course is selected and the
+  // library has loaded (from Notes → "Generate exam for all").
+  useEffect(() => {
+    if (!pendingStart || !courseId || loading || phase !== "setup" || building) return;
+    setPendingStart(false);
+    startExam();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingStart, courseId, loading, phase, building]);
 
   const restart = () => {
     exitFullscreen();
