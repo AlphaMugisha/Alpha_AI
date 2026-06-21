@@ -77,7 +77,11 @@ const navSections: {
 
 export function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  // `collapsed` is the pinned state (toggle button). Hovering temporarily
+  // expands it; leaving collapses it again — unless it's pinned open.
+  const [collapsed, setCollapsed] = useState(true);
+  const [hovered, setHovered] = useState(false);
+  const expanded = !collapsed || hovered;
   const { user, profile } = useAuth();
 
   const displayName = profile?.full_name || user?.email?.split("@")[0] || "User";
@@ -91,7 +95,9 @@ export function Sidebar() {
   return (
     <TooltipProvider delayDuration={0}>
       <motion.aside
-        animate={{ width: collapsed ? 64 : 240 }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        animate={{ width: expanded ? 240 : 64 }}
         transition={{ duration: 0.2, ease: "easeInOut" }}
         className="relative flex flex-col border-r bg-card/50 backdrop-blur-sm min-h-screen shrink-0"
       >
