@@ -30,6 +30,7 @@ import {
   Maximize2,
   Minimize2,
   ArrowLeft,
+  ArrowRight,
   FolderOpen,
   GraduationCap,
   Layers,
@@ -270,10 +271,10 @@ export default function NotesPage() {
       {showUpload ? (
         <div className="border rounded-xl bg-card p-6 sm:p-8">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-lg font-semibold">Upload Study Material</h3>
             <Button variant="ghost" size="sm" onClick={() => setShowUpload(false)}>
-              <X className="w-4 h-4 mr-2" /> Cancel
+              <ArrowLeft className="w-4 h-4 mr-2" /> Back to notes
             </Button>
+            <h3 className="text-lg font-semibold">Upload Study Material</h3>
           </div>
 
           <div className="max-w-xl mx-auto">
