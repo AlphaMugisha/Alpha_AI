@@ -541,31 +541,57 @@ export default function NotesPage() {
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {courseCards.map((c) => (
-                <motion.div
-                  key={c.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  onClick={() => setSelectedCourseId(c.id)}
-                  className="group border rounded-xl bg-card p-5 cursor-pointer transition-all hover:border-primary/40 hover:shadow-md"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center shadow-sm">
-                      <Layers className="w-6 h-6 text-white" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {courseCards.map((c, i) => {
+                const isUncat = c.id === UNCATEGORIZED;
+                return (
+                  <motion.button
+                    key={c.id}
+                    initial={{ opacity: 0, y: 12 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.25, delay: i * 0.04 }}
+                    whileHover={{ y: -4 }}
+                    onClick={() => setSelectedCourseId(c.id)}
+                    className="group relative overflow-hidden rounded-2xl border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary/50 hover:shadow-lg"
+                  >
+                    {/* soft glow on hover */}
+                    <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-gradient-to-br from-violet-500/25 to-indigo-500/25 opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100" />
+
+                    <div className="relative flex items-start justify-between">
+                      <div
+                        className={cn(
+                          "flex h-12 w-12 items-center justify-center rounded-xl shadow-sm transition-transform duration-300 group-hover:scale-105",
+                          isUncat
+                            ? "bg-gradient-to-br from-slate-400 to-slate-600"
+                            : "bg-gradient-to-br from-violet-600 to-indigo-600"
+                        )}
+                      >
+                        {isUncat ? (
+                          <FolderOpen className="h-6 w-6 text-white" />
+                        ) : (
+                          <Layers className="h-6 w-6 text-white" />
+                        )}
+                      </div>
+                      <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+                        {c.count} {c.count === 1 ? "note" : "notes"}
+                      </span>
                     </div>
-                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-muted text-muted-foreground">
-                      {c.count} {c.count === 1 ? "note" : "notes"}
-                    </span>
-                  </div>
-                  <h3 className="font-semibold mt-4 truncate group-hover:text-primary transition-colors">
-                    {c.name}
-                  </h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {c.latest ? `Updated ${formatDate(c.latest)}` : "No notes yet"}
-                  </p>
-                </motion.div>
-              ))}
+
+                    <h3 className="relative mt-4 truncate font-semibold transition-colors group-hover:text-primary">
+                      {c.name}
+                    </h3>
+
+                    <div className="relative mt-1 flex items-center justify-between">
+                      <p className="text-xs text-muted-foreground">
+                        {c.latest ? `Updated ${formatDate(c.latest)}` : "No notes yet"}
+                      </p>
+                      <span className="flex -translate-x-1 items-center gap-1 text-xs font-medium text-primary opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100">
+                        Open <ArrowRight className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                  </motion.button>
+                );
+              })}
             </div>
           )}
         </div>
