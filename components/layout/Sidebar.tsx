@@ -156,18 +156,18 @@ export function Sidebar() {
                       <TooltipTrigger asChild>
                         <Link href={href}>
                           <motion.div
-                            whileHover={{ x: collapsed ? 0 : 2 }}
+                            whileHover={{ x: expanded ? 2 : 0 }}
                             whileTap={{ scale: 0.98 }}
                             className={cn(
                               "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
                               active
                                 ? "bg-primary text-primary-foreground"
                                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
-                              collapsed && "justify-center px-2"
+                              !expanded && "justify-center px-2"
                             )}
                           >
                             <Icon className="h-4 w-4 shrink-0" />
-                            {!collapsed && (
+                            {expanded && (
                               <motion.span
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -179,7 +179,7 @@ export function Sidebar() {
                           </motion.div>
                         </Link>
                       </TooltipTrigger>
-                      {collapsed && (
+                      {!expanded && (
                         <TooltipContent side="right">{label}</TooltipContent>
                       )}
                     </Tooltip>
@@ -193,7 +193,7 @@ export function Sidebar() {
         {user && (
           <div className={cn(
             "border-t p-3 flex items-center gap-3",
-            collapsed && "justify-center"
+            !expanded && "justify-center"
           )}>
             <Avatar className="h-8 w-8 shrink-0 border-2 border-violet-500/30">
               <AvatarImage src={profile?.avatar_url ?? ""} alt={displayName} />
@@ -201,7 +201,7 @@ export function Sidebar() {
                 {initials}
               </AvatarFallback>
             </Avatar>
-            {!collapsed && (
+            {expanded && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
