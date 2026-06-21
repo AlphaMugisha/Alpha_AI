@@ -98,7 +98,7 @@ export function Sidebar() {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         animate={{ width: expanded ? 240 : 64 }}
-        transition={{ duration: 0.2, ease: "easeInOut" }}
+        transition={{ duration: 0.4, ease: [0.25, 0.1, 0.25, 1] }}
         className="relative flex flex-col border-r bg-card/50 backdrop-blur-sm min-h-screen shrink-0"
       >
         <div className="flex items-center justify-between p-4 border-b">
