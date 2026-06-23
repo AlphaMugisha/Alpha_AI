@@ -77,6 +77,10 @@ export default function NotesPage() {
   const [courseId, setCourseId] = useState<string>("");
   const [creatingCourse, setCreatingCourse] = useState(false);
   const [newCourseName, setNewCourseName] = useState("");
+  // "This is a Q&A paper" mode — answer it question-by-question from course notes.
+  const [paperMode, setPaperMode] = useState(false);
+  const [paperInstructions, setPaperInstructions] = useState("");
+  const [answeringPaper, setAnsweringPaper] = useState(false);
 
   const refreshNotes = async () => {
     const all = await notesDb.getAll();
@@ -169,6 +173,8 @@ export default function NotesPage() {
     setShowUpload(true);
     setSelectedNote(null);
     setUploadedFile(null);
+    setPaperMode(false);
+    setPaperInstructions("");
     // Pre-select the course we're currently inside, for convenience.
     if (selectedCourseId && selectedCourseId !== UNCATEGORIZED) {
       setCourseId(selectedCourseId);
@@ -225,6 +231,51 @@ export default function NotesPage() {
       toast.error(err instanceof Error ? err.message : "Failed to generate notes");
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleAnswerPaper = async () => {
+    if (!uploadedFile) { toast.error("Please upload the question paper first."); return; }
+    if (!courseId) { toast.error("Please choose which course this paper belongs to."); return; }
+    if (!hasApiKey) { toast.error("Please add your Gemini API key in Settings."); return; }
+
+    setAnsweringPaper(true);
+    try {
+      const courseNotes = notes
+        .filter((n) => n.courseId === courseId)
+        .map((n) => `# ${n.title}\n${n.content}`)
+        .join("\n\n");
+      const cName = courses.find((c) => c.id === courseId)?.name;
+
+      const answers = await answerQuestionPaper(
+        aiConfig,
+        uploadedFile.content,
+        cName,
+        courseNotes,
+        paperInstructions.trim() || undefined
+      );
+
+      const note: Note = {
+        id: generateId(),
+        title: `Answers — ${uploadedFile.name.replace(/\.[^.]+$/, "")}`,
+        content: answers,
+        sourceFile: uploadedFile.name,
+        courseId,
+        createdAt: new Date(),
+        tags: ["paper-answers"],
+      };
+      await notesDb.save(note);
+      const all = await refreshNotes();
+      addSession("notes", note.title);
+      toast.success("Paper answered — walk through it question by question!");
+      setUploadedFile(null);
+      setShowUpload(false);
+      setSelectedCourseId(courseId);
+      setSelectedNote(all.find((n) => n.id === note.id) || note);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to answer the paper");
+    } finally {
+      setAnsweringPaper(false);
     }
   };
 
@@ -372,18 +423,60 @@ export default function NotesPage() {
               )}
             </div>
 
-            <Button
-              onClick={handleGenerate}
-              disabled={!uploadedFile || !courseId || isGenerating || !hasApiKey}
-              className="w-full mt-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
-              size="lg"
-            >
-              {isGenerating ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Notes...</>
-              ) : (
-                <><FileText className="w-4 h-4 mr-2" /> Generate AI Notes</>
-              )}
-            </Button>
+            {/* Q&A paper mode */}
+            <div className="mt-4 flex items-start justify-between gap-4 rounded-xl border p-3">
+              <div className="min-w-0">
+                <Label className="text-sm">This is a question &amp; answer paper</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Instead of notes, I&apos;ll answer it question by question — in simple language,
+                  grounded in this course&apos;s notes.
+                </p>
+              </div>
+              <Switch checked={paperMode} onCheckedChange={setPaperMode} />
+            </div>
+
+            {paperMode && (
+              <div className="mt-3">
+                <Label className="text-sm mb-2 block">
+                  Instructions for the AI{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Textarea
+                  placeholder="e.g. Only answer section B; explain each step; keep it very beginner-friendly."
+                  value={paperInstructions}
+                  onChange={(e) => setPaperInstructions(e.target.value)}
+                  className="min-h-[70px]"
+                />
+              </div>
+            )}
+
+            {paperMode ? (
+              <Button
+                onClick={handleAnswerPaper}
+                disabled={!uploadedFile || !courseId || answeringPaper || !hasApiKey}
+                className="w-full mt-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+                size="lg"
+              >
+                {answeringPaper ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Answering paper…</>
+                ) : (
+                  <><ClipboardCheck className="w-4 h-4 mr-2" /> Answer this paper</>
+                )}
+              </Button>
+            ) : (
+              <Button
+                onClick={handleGenerate}
+                disabled={!uploadedFile || !courseId || isGenerating || !hasApiKey}
+                className="w-full mt-4 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+                size="lg"
+              >
+                {isGenerating ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating Notes...</>
+                ) : (
+                  <><FileText className="w-4 h-4 mr-2" /> Generate AI Notes</>
+                )}
+              </Button>
+            )}
 
             {!hasApiKey && (
               <p className="text-center text-sm text-muted-foreground mt-3">
