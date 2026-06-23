@@ -29,6 +29,10 @@ import {
   Trash2,
   Plus,
   File,
+  Lightbulb,
+  HelpCircle,
+  MessageSquare,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +64,16 @@ export default function QuizPage() {
     Record<number, { awarded: number; feedback: string }>
   >({});
   const [finalScore, setFinalScore] = useState(0);
+  // Per-question help: hints, "I don't know" reveals, and the discuss panel.
+  const [hints, setHints] = useState<Record<number, string>>({});
+  const [hintLoading, setHintLoading] = useState(false);
+  const [revealed, setRevealed] = useState<Set<number>>(new Set());
+  const [discussions, setDiscussions] = useState<
+    Record<number, { role: "user" | "assistant"; content: string }[]>
+  >({});
+  const [askOpen, setAskOpen] = useState(false);
+  const [askInput, setAskInput] = useState("");
+  const [askLoading, setAskLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [numQuestions, setNumQuestions] = useState("10");
   const [instructions, setInstructions] = useState("");
@@ -186,6 +200,11 @@ export default function QuizPage() {
     setTextAnswers(new Array(quiz.questions.length).fill(""));
     setOpenGrades({});
     setFinalScore(0);
+    setHints({});
+    setRevealed(new Set());
+    setDiscussions({});
+    setAskOpen(false);
+    setAskInput("");
     setMode("taking");
     quizStartRef.current = Date.now();
   };
