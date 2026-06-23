@@ -480,6 +480,99 @@ export default function QuizPage() {
                       <p className="text-sm text-blue-600 dark:text-blue-300">{q.explanation}</p>
                     </motion.div>
                   )}
+
+                  {/* Hint */}
+                  {hints[currentQ] && (
+                    <div className="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-800">
+                      <p className="text-sm font-medium text-amber-700 dark:text-amber-400 mb-1 flex items-center gap-1.5">
+                        <Lightbulb className="w-4 h-4" /> Hint
+                      </p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300">{hints[currentQ]}</p>
+                    </div>
+                  )}
+
+                  {/* Help controls */}
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={requestHint}
+                      disabled={hintLoading || !!hints[currentQ] || answered || !hasApiKey}
+                    >
+                      {hintLoading ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Lightbulb className="w-4 h-4 mr-2" />
+                      )}
+                      Hint
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={markDontKnow}
+                      disabled={answered}
+                    >
+                      <HelpCircle className="w-4 h-4 mr-2" /> I don&apos;t know
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAskOpen((o) => !o)}
+                      disabled={!hasApiKey}
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" /> Ask about this
+                    </Button>
+                  </div>
+
+                  {/* Ask / discuss panel */}
+                  {askOpen && (
+                    <div className="rounded-xl border bg-muted/30 p-3 space-y-3">
+                      {thread.length > 0 && (
+                        <div className="space-y-2 max-h-60 overflow-y-auto">
+                          {thread.map((m, mi) => (
+                            <div
+                              key={mi}
+                              className={cn(
+                                "text-sm rounded-lg px-3 py-2",
+                                m.role === "user"
+                                  ? "bg-primary text-primary-foreground ml-8"
+                                  : "bg-background border mr-8 whitespace-pre-wrap"
+                              )}
+                            >
+                              {m.content}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="flex gap-2">
+                        <Textarea
+                          value={askInput}
+                          onChange={(e) => setAskInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              sendAsk();
+                            }
+                          }}
+                          placeholder="Disagree or confused? Ask about this question…"
+                          className="min-h-[44px] max-h-28 resize-none text-sm"
+                          rows={1}
+                        />
+                        <Button
+                          size="icon"
+                          className="h-11 w-11 shrink-0"
+                          onClick={sendAsk}
+                          disabled={!askInput.trim() || askLoading}
+                        >
+                          {askLoading ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Send className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </motion.div>
