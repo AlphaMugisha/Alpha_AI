@@ -25,6 +25,49 @@ export async function generateChatResponse(
   return result.response.text();
 }
 
+export interface InlineImage {
+  mimeType: string;
+  data: string; // base64, no "data:..." prefix
+}
+
+/**
+ * Vision chat: same as generateChatResponse but the latest user turn can carry
+ * one or more images (gemini-2.5-flash is multimodal). The images are attached
+ * as inlineData parts to the final user message.
+ */
+export async function generateChatResponseMultimodal(
+  apiKey: string,
+  messages: { role: "user" | "model"; parts: { text: string }[] }[],
+  images: InlineImage[],
+  systemPrompt?: string
+): Promise<string> {
+  const genAI = getClient(apiKey);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash",
+    systemInstruction:
+      systemPrompt ||
+      "You are Alpha, an intelligent study assistant. Read any attached images or material carefully and help the student learn. Format responses with markdown.",
+  });
+
+  const history = messages.slice(0, -1);
+  const last = messages[messages.length - 1];
+  const lastParts: Array<
+    { text: string } | { inlineData: { mimeType: string; data: string } }
+  > = [...last.parts];
+  for (const img of images) {
+    lastParts.push({ inlineData: { mimeType: img.mimeType, data: img.data } });
+  }
+
+  const contents = [
+    ...history.map((m) => ({ role: m.role, parts: m.parts })),
+    { role: "user" as const, parts: lastParts },
+  ];
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = await model.generateContent({ contents } as any);
+  return result.response.text();
+}
+
 /**
  * JSON-mode generation. Forces clean JSON output (no markdown fences) and a
  * generous token budget so large structured payloads (e.g. exams) aren't

@@ -7,6 +7,8 @@ import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
 import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateQuiz } from "@/lib/ai";
+import { generateMixedQuiz, getQuizHint, askAboutQuestion } from "@/lib/quiz";
+import { gradeShortAnswers, type ShortGradeInput } from "@/lib/exam";
 import { parseFile, validateFile } from "@/lib/fileParser";
 import { quizDb, notesDb } from "@/lib/db";
 import { generateId, formatDate, formatFileSize } from "@/lib/utils";
@@ -39,6 +41,7 @@ import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 
 type QuizMode = "setup" | "taking" | "results";
 
@@ -50,14 +53,26 @@ export default function QuizPage() {
   const [currentQuiz, setCurrentQuiz] = useState<Quiz | null>(null);
   const [currentQ, setCurrentQ] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState<(number | null)[]>([]);
+  // Written answers for open-ended questions (parallel to selectedAnswers).
+  const [textAnswers, setTextAnswers] = useState<string[]>([]);
+  const [grading, setGrading] = useState(false);
+  const [openGrades, setOpenGrades] = useState<
+    Record<number, { awarded: number; feedback: string }>
+  >({});
+  const [finalScore, setFinalScore] = useState(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const [numQuestions, setNumQuestions] = useState("10");
+  const [instructions, setInstructions] = useState("");
+  const [practiceMode, setPracticeMode] = useState(false);
   const [inputContent, setInputContent] = useState("");
   const [uploadedFile, setUploadedFile] = useState<{ name: string; content: string } | null>(null);
   const [prefilling, setPrefilling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const autoNoteRef = useRef(false);
+  const autoIdRef = useRef(false);
   const quizStartRef = useRef(0);
+
+  const isOpen = (q: QuizQuestion) => (q.type ?? "mcq") === "open";
 
   const refreshQuizzes = async () => {
     setQuizzes(await quizDb.getAll());
@@ -106,6 +121,19 @@ export default function QuizPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasApiKey, aiConfig]);
 
+  // Deep link from Chat: /quiz?id=<id> — load a saved quiz and start it.
+  useEffect(() => {
+    if (autoIdRef.current || quizzes.length === 0) return;
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) return;
+    const quiz = quizzes.find((q) => q.id === id);
+    if (quiz) {
+      autoIdRef.current = true;
+      startQuiz(quiz);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quizzes]);
+
   const handleFile = async (file: File) => {
     const error = validateFile(file);
     if (error) { toast.error(error); return; }
@@ -126,10 +154,15 @@ export default function QuizPage() {
 
     setIsGenerating(true);
     try {
-      const questions = await generateQuiz(aiConfig, content, parseInt(numQuestions));
+      const questions = await generateMixedQuiz(aiConfig, content, {
+        count: numQuestions === "auto" ? undefined : parseInt(numQuestions),
+        instructions: instructions.trim() || undefined,
+        mode: practiceMode ? "practice" : "generate",
+      });
+      const baseName = uploadedFile?.name.replace(/\.[^.]+$/, "") || "Custom Quiz";
       const quiz: Quiz = {
         id: generateId(),
-        title: uploadedFile?.name.replace(/\.[^.]+$/, "") || "Custom Quiz",
+        title: practiceMode ? `Practice — ${baseName}` : baseName,
         questions,
         sourceContent: content.slice(0, 500),
         createdAt: new Date(),
@@ -150,6 +183,9 @@ export default function QuizPage() {
     setCurrentQuiz(quiz);
     setCurrentQ(0);
     setSelectedAnswers(new Array(quiz.questions.length).fill(null));
+    setTextAnswers(new Array(quiz.questions.length).fill(""));
+    setOpenGrades({});
+    setFinalScore(0);
     setMode("taking");
     quizStartRef.current = Date.now();
   };
@@ -161,36 +197,85 @@ export default function QuizPage() {
     setSelectedAnswers(newAnswers);
   };
 
-  const finishQuiz = () => {
-    if (!currentQuiz) return;
-    const score = selectedAnswers.reduce<number>((acc, ans, i) => {
-      return acc + (ans === currentQuiz.questions[i].correctAnswer ? 1 : 0);
-    }, 0);
+  const setTextAnswer = (value: string) => {
+    setTextAnswers((prev) => {
+      const next = [...prev];
+      next[currentQ] = value;
+      return next;
+    });
+  };
 
-    const result: QuizResult = {
-      quizId: currentQuiz.id,
-      score,
-      totalQuestions: currentQuiz.questions.length,
-      answers: selectedAnswers.map(a => a ?? -1),
-      completedAt: new Date(),
-    };
-    quizDb.saveResult(result).catch(() => {});
-    // Log the completion with its score so gamification can award the
-    // high-score bonus and count it toward quiz goals/achievements.
-    const pct = currentQuiz.questions.length
-      ? Math.round((score / currentQuiz.questions.length) * 100)
-      : 0;
-    const minutes = quizStartRef.current
-      ? Math.max(1, Math.round((Date.now() - quizStartRef.current) / 60000))
-      : undefined;
-    addSession("quiz", `Completed: ${currentQuiz.title}`, { score: pct, duration: minutes });
-    setMode("results");
+  const finishQuiz = async () => {
+    if (!currentQuiz) return;
+    setGrading(true);
+    try {
+      const qs = currentQuiz.questions;
+      let score = 0;
+
+      // Auto-mark MCQs; collect open-ended for AI grading (1 mark each).
+      const openItems: { idx: number; input: ShortGradeInput }[] = [];
+      qs.forEach((q, i) => {
+        if (isOpen(q)) {
+          openItems.push({
+            idx: i,
+            input: {
+              question: q.question,
+              modelAnswer: q.modelAnswer,
+              marks: 1,
+              answer: textAnswers[i] || "",
+            },
+          });
+        } else if (selectedAnswers[i] === q.correctAnswer) {
+          score += 1;
+        }
+      });
+
+      const grades: Record<number, { awarded: number; feedback: string }> = {};
+      if (openItems.length > 0) {
+        const results = await gradeShortAnswers(
+          aiConfig,
+          openItems.map((o) => o.input),
+          "balanced"
+        );
+        openItems.forEach((o, k) => {
+          grades[o.idx] = results[k];
+          score += results[k].awarded;
+        });
+      }
+      setOpenGrades(grades);
+      setFinalScore(score);
+
+      const total = qs.length;
+      const pct = total ? Math.round((score / total) * 100) : 0;
+      const result: QuizResult = {
+        quizId: currentQuiz.id,
+        score: Math.round(score),
+        totalQuestions: total,
+        answers: selectedAnswers.map((a) => a ?? -1),
+        completedAt: new Date(),
+      };
+      quizDb.saveResult(result).catch(() => {});
+      // Log the completion with its score so gamification can award the
+      // high-score bonus and count it toward quiz goals/achievements.
+      const minutes = quizStartRef.current
+        ? Math.max(1, Math.round((Date.now() - quizStartRef.current) / 60000))
+        : undefined;
+      addSession("quiz", `Completed: ${currentQuiz.title}`, { score: pct, duration: minutes });
+      setMode("results");
+    } catch {
+      toast.error("Couldn't grade the quiz. Please try again.");
+    } finally {
+      setGrading(false);
+    }
   };
 
   const resetQuiz = () => {
     setCurrentQuiz(null);
     setMode("setup");
     setSelectedAnswers([]);
+    setTextAnswers([]);
+    setOpenGrades({});
+    setFinalScore(0);
     setCurrentQ(0);
   };
 
@@ -200,15 +285,22 @@ export default function QuizPage() {
     toast.success("Quiz deleted");
   };
 
-  const score = currentQuiz
-    ? selectedAnswers.filter((a, i) => a === currentQuiz.questions[i]?.correctAnswer).length
-    : 0;
-  const percentage = currentQuiz ? Math.round((score / currentQuiz.questions.length) * 100) : 0;
+  const totalQ = currentQuiz?.questions.length ?? 0;
+  const percentage = totalQ ? Math.round((finalScore / totalQ) * 100) : 0;
+  const scoreDisplay = Math.round(finalScore * 10) / 10;
 
   if (mode === "taking" && currentQuiz) {
     const q: QuizQuestion = currentQuiz.questions[currentQ];
+    const open = isOpen(q);
     const chosen = selectedAnswers[currentQ];
-    const answered = chosen !== null;
+    const answered = open
+      ? (textAnswers[currentQ]?.trim().length ?? 0) > 0
+      : chosen !== null;
+    const allAnswered = currentQuiz.questions.every((qq, i) =>
+      (qq.type ?? "mcq") === "open"
+        ? (textAnswers[i]?.trim().length ?? 0) > 0
+        : selectedAnswers[i] !== null
+    );
 
     return (
       <DashboardLayout>
@@ -236,10 +328,26 @@ export default function QuizPage() {
             >
               <Card>
                 <CardHeader>
+                  <Badge variant="secondary" className="w-fit mb-1 text-[10px]">
+                    {open ? "Open-ended" : "Multiple choice"}
+                  </Badge>
                   <CardTitle className="text-lg font-medium">{q.question}</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {q.options.map((option, i) => {
+                  {open ? (
+                    <>
+                      <Textarea
+                        value={textAnswers[currentQ] ?? ""}
+                        onChange={(e) => setTextAnswer(e.target.value)}
+                        placeholder="Type your answer… it'll be graded by AI when you finish."
+                        className="min-h-[140px]"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Open-ended answers are AI-graded with feedback after you finish the quiz.
+                      </p>
+                    </>
+                  ) : (
+                    q.options.map((option, i) => {
                     let variant = "default";
                     if (answered) {
                       if (i === q.correctAnswer) variant = "correct";
@@ -273,9 +381,10 @@ export default function QuizPage() {
                         </div>
                       </button>
                     );
-                  })}
+                  })
+                  )}
 
-                  {answered && (
+                  {!open && answered && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
@@ -297,10 +406,14 @@ export default function QuizPage() {
             {currentQ === currentQuiz.questions.length - 1 ? (
               <Button
                 onClick={finishQuiz}
-                disabled={selectedAnswers.some(a => a === null)}
+                disabled={!allAnswered || grading}
                 className="bg-gradient-to-r from-violet-600 to-indigo-600"
               >
-                <Trophy className="w-4 h-4 mr-2" /> Finish Quiz
+                {grading ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Grading…</>
+                ) : (
+                  <><Trophy className="w-4 h-4 mr-2" /> Finish Quiz</>
+                )}
               </Button>
             ) : (
               <Button
@@ -337,20 +450,20 @@ export default function QuizPage() {
                 {percentage >= 80 ? "Excellent! 🎉" : percentage >= 60 ? "Good Job! 👍" : "Keep Practicing! 💪"}
               </h2>
               <p className="text-muted-foreground mb-6">
-                You scored {score} out of {currentQuiz.questions.length} questions
+                You scored {scoreDisplay} out of {totalQ} {totalQ === 1 ? "question" : "questions"}
               </p>
               <div className="grid grid-cols-3 gap-4 mb-8">
                 <div className="p-3 bg-muted rounded-xl">
-                  <div className="text-2xl font-bold text-green-500">{score}</div>
-                  <div className="text-xs text-muted-foreground">Correct</div>
+                  <div className="text-2xl font-bold text-green-500">{scoreDisplay}</div>
+                  <div className="text-xs text-muted-foreground">Score</div>
                 </div>
                 <div className="p-3 bg-muted rounded-xl">
-                  <div className="text-2xl font-bold text-red-500">{currentQuiz.questions.length - score}</div>
-                  <div className="text-xs text-muted-foreground">Incorrect</div>
+                  <div className="text-2xl font-bold text-primary">{totalQ}</div>
+                  <div className="text-xs text-muted-foreground">Questions</div>
                 </div>
                 <div className="p-3 bg-muted rounded-xl">
                   <div className="text-2xl font-bold text-primary">{percentage}%</div>
-                  <div className="text-xs text-muted-foreground">Score</div>
+                  <div className="text-xs text-muted-foreground">Percentage</div>
                 </div>
               </div>
               <div className="flex gap-3 justify-center">
@@ -368,8 +481,12 @@ export default function QuizPage() {
           <div className="space-y-3">
             <h3 className="font-semibold">Review Answers</h3>
             {currentQuiz.questions.map((q, i) => {
-              const userAns = selectedAnswers[i];
-              const correct = userAns === q.correctAnswer;
+              const open = isOpen(q);
+              const grade = openGrades[i];
+              // Open: "correct" if AI awarded at least half a mark.
+              const correct = open
+                ? (grade?.awarded ?? 0) >= 0.5
+                : selectedAnswers[i] === q.correctAnswer;
               return (
                 <Card key={q.id} className={cn(
                   "border-2",
@@ -380,15 +497,35 @@ export default function QuizPage() {
                       {correct
                         ? <Check className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
                         : <X className="w-5 h-5 text-red-500 shrink-0 mt-0.5" />}
-                      <div>
+                      <div className="min-w-0">
                         <p className="font-medium text-sm mb-2">{q.question}</p>
-                        <p className="text-xs text-green-600 dark:text-green-400">
-                          Correct: {q.options[q.correctAnswer]}
-                        </p>
-                        {!correct && userAns !== null && (
-                          <p className="text-xs text-red-600 dark:text-red-400">
-                            Your answer: {q.options[userAns]}
-                          </p>
+                        {open ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              Your answer: <span className="text-foreground">{textAnswers[i]?.trim() || "(left blank)"}</span>
+                            </p>
+                            {grade && (
+                              <p className="text-xs font-medium mt-1">
+                                Awarded {Math.round(grade.awarded * 100)}% · {grade.feedback}
+                              </p>
+                            )}
+                            {q.modelAnswer && (
+                              <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                Model answer: {q.modelAnswer}
+                              </p>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-xs text-green-600 dark:text-green-400">
+                              Correct: {q.options[q.correctAnswer]}
+                            </p>
+                            {!correct && selectedAnswers[i] !== null && (
+                              <p className="text-xs text-red-600 dark:text-red-400">
+                                Your answer: {q.options[selectedAnswers[i] as number]}
+                              </p>
+                            )}
+                          </>
                         )}
                         <p className="text-xs text-muted-foreground mt-1">{q.explanation}</p>
                       </div>
@@ -470,15 +607,50 @@ export default function QuizPage() {
                 />
               </div>
 
+              {/* Practice mode: the document already contains questions */}
+              <div className="flex items-start justify-between gap-4 rounded-xl border p-3">
+                <div className="min-w-0">
+                  <Label className="text-sm">This document is just questions</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Extract the questions from the file and turn them into a practice quiz
+                    (auto-detects multiple-choice vs open-ended).
+                  </p>
+                </div>
+                <Switch checked={practiceMode} onCheckedChange={setPracticeMode} />
+              </div>
+
+              {/* Optional free-form prompt */}
+              <div>
+                <Label className="text-sm mb-2 block">
+                  Instructions for the AI{" "}
+                  <span className="text-muted-foreground font-normal">(optional)</span>
+                </Label>
+                <Textarea
+                  placeholder={
+                    practiceMode
+                      ? "e.g. Only the questions from section B; add a model answer for each."
+                      : "e.g. Focus on chapter 3; make them harder; include more open-ended questions."
+                  }
+                  value={instructions}
+                  onChange={(e) => setInstructions(e.target.value)}
+                  className="min-h-[70px]"
+                />
+              </div>
+
               <div className="flex items-center gap-4">
                 <div className="flex-1">
-                  <Label className="text-sm mb-2 block">Number of Questions</Label>
+                  <Label className="text-sm mb-2 block">
+                    {practiceMode ? "Max questions" : "Number of questions"}
+                  </Label>
                   <Select value={numQuestions} onValueChange={setNumQuestions}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {["5", "10", "15", "20"].map(n => (
+                      <SelectItem value="auto">
+                        {practiceMode ? "All found" : "Auto (AI decides)"}
+                      </SelectItem>
+                      {["5", "10", "15", "20", "25", "30", "40", "50"].map((n) => (
                         <SelectItem key={n} value={n}>{n} questions</SelectItem>
                       ))}
                     </SelectContent>

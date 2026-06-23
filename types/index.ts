@@ -29,12 +29,18 @@ export interface Course {
   createdAt: Date;
 }
 
+export type QuizQuestionType = "mcq" | "open";
+
 export interface QuizQuestion {
   id: string;
+  // Absent => "mcq" (back-compat with quizzes saved before open-ended existed).
+  type?: QuizQuestionType;
   question: string;
   options: string[];
   correctAnswer: number;
   explanation: string;
+  // Open-ended only: the reference answer used to AI-grade the written response.
+  modelAnswer?: string;
 }
 
 export interface Quiz {

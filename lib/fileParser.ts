@@ -87,7 +87,34 @@ async function parseDOCX(file: File): Promise<string> {
   }
 }
 
-export function validateFile(file: File): string | null {
+export const IMAGE_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
+];
+const IMAGE_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
+
+export function isImageFile(file: File): boolean {
+  const ext = "." + (file.name.split(".").pop()?.toLowerCase() ?? "");
+  return IMAGE_TYPES.includes(file.type) || IMAGE_EXTS.includes(ext);
+}
+
+/** Reads a file as a base64 string WITHOUT the `data:<mime>;base64,` prefix. */
+export function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result);
+      resolve(result.includes(",") ? result.split(",")[1] : result);
+    };
+    reader.onerror = () => reject(new Error("Could not read the image file."));
+    reader.readAsDataURL(file);
+  });
+}
+
+export function validateFile(file: File, allowImages = false): string | null {
   const maxSize = 10 * 1024 * 1024;
   if (file.size > maxSize) {
     return "File size must be under 10MB";
@@ -97,12 +124,21 @@ export function validateFile(file: File): string | null {
     "text/plain",
     "application/pdf",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ...(allowImages ? IMAGE_TYPES : []),
   ];
-  const allowedExts = [".txt", ".pdf", ".docx", ".md"];
+  const allowedExts = [
+    ".txt",
+    ".pdf",
+    ".docx",
+    ".md",
+    ...(allowImages ? IMAGE_EXTS : []),
+  ];
   const ext = "." + file.name.split(".").pop()?.toLowerCase();
 
   if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
-    return "Only PDF, DOCX, TXT, and MD files are supported";
+    return allowImages
+      ? "Only images, PDF, DOCX, TXT, and MD files are supported"
+      : "Only PDF, DOCX, TXT, and MD files are supported";
   }
 
   return null;

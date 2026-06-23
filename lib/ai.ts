@@ -24,11 +24,24 @@ async function run<T>(provider: AIConfig["provider"], fn: () => Promise<T>): Pro
   }
 }
 
+export type ChatImage = gemini.InlineImage;
+
 export async function generateChatResponse(
   config: AIConfig,
   history: GeminiHistory,
-  systemPrompt?: string
+  systemPrompt?: string,
+  images?: ChatImage[]
 ): Promise<string> {
+  if (images && images.length > 0) {
+    if (config.provider !== "gemini") {
+      throw new Error(
+        "Image understanding currently needs the Gemini provider. Switch to Gemini in Settings to chat with images."
+      );
+    }
+    return run(config.provider, () =>
+      gemini.generateChatResponseMultimodal(config.apiKey, history, images, systemPrompt)
+    );
+  }
   return run(config.provider, () =>
     config.provider === "openai"
       ? openaiLib.generateChatResponse(config.apiKey, toChatMessages(history), systemPrompt)

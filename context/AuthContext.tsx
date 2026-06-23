@@ -56,15 +56,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const fetchProfile = useCallback(
     async (userId: string) => {
       if (!supabase) return;
-      const { data, error } = await supabase
-        .from("profiles")
-        // Explicit columns — never ship github_token to the browser.
-        .select(
-          "id, full_name, avatar_url, username, phone, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_provider, daily_goal_minutes, default_difficulty, notifications_enabled, created_at, updated_at"
-        )
-        .eq("id", userId)
-        .single();
-      if (!error && data) setProfile(data as Profile);
+      try {
+        const { data, error } = await supabase
+          .from("profiles")
+          // Explicit columns — never ship github_token to the browser.
+          .select(
+            "id, full_name, avatar_url, username, phone, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_provider, daily_goal_minutes, default_difficulty, notifications_enabled, created_at, updated_at"
+          )
+          .eq("id", userId)
+          .single();
+        if (!error && data) setProfile(data as Profile);
+      } catch {
+        // Transient network failure reaching Supabase — keep going without the
+        // profile rather than throwing an uncaught "Failed to fetch".
+      }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
@@ -78,13 +83,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return;
 
     const init = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) await fetchProfile(session.user.id);
-      setLoading(false);
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+        if (session?.user) await fetchProfile(session.user.id);
+      } catch {
+        // Couldn't reach Supabase (offline / flaky network). Treat as
+        // signed-out for now; onAuthStateChange will recover the session
+        // automatically once connectivity returns.
+      } finally {
+        setLoading(false);
+      }
     };
 
     init();

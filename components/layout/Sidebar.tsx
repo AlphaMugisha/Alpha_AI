@@ -171,6 +171,7 @@ export function Sidebar() {
                               <motion.span
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
+                                transition={{ delay: 0.12, duration: 0.25 }}
                                 className="truncate"
                               >
                                 {label}
