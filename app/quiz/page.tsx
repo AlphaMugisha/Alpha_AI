@@ -224,6 +224,58 @@ export default function QuizPage() {
     });
   };
 
+  const requestHint = async () => {
+    if (!currentQuiz || hints[currentQ] || hintLoading) return;
+    setHintLoading(true);
+    try {
+      const hint = await getQuizHint(aiConfig, currentQuiz.questions[currentQ]);
+      setHints((prev) => ({ ...prev, [currentQ]: hint }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't get a hint.");
+    } finally {
+      setHintLoading(false);
+    }
+  };
+
+  // "I don't know": reveal the answer and mark the question as given up.
+  const markDontKnow = () => {
+    if (!currentQuiz) return;
+    const q = currentQuiz.questions[currentQ];
+    if (!isOpen(q)) {
+      setSelectedAnswers((prev) => {
+        const next = [...prev];
+        next[currentQ] = -1; // sentinel: answered but no option chosen → scored 0
+        return next;
+      });
+    }
+    setRevealed((prev) => new Set(prev).add(currentQ));
+  };
+
+  const sendAsk = async () => {
+    if (!currentQuiz || !askInput.trim() || askLoading) return;
+    if (!hasApiKey) {
+      toast.error("Add your Gemini API key in Settings first.");
+      return;
+    }
+    const q = currentQuiz.questions[currentQ];
+    const userMsg = { role: "user" as const, content: askInput.trim() };
+    const thread = [...(discussions[currentQ] ?? []), userMsg];
+    setDiscussions((prev) => ({ ...prev, [currentQ]: thread }));
+    setAskInput("");
+    setAskLoading(true);
+    try {
+      const reply = await askAboutQuestion(aiConfig, q, thread);
+      setDiscussions((prev) => ({
+        ...prev,
+        [currentQ]: [...thread, { role: "assistant", content: reply }],
+      }));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Couldn't get a response.");
+    } finally {
+      setAskLoading(false);
+    }
+  };
+
   const finishQuiz = async () => {
     if (!currentQuiz) return;
     setGrading(true);
