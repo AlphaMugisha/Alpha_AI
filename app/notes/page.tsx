@@ -35,6 +35,7 @@ import {
   FolderOpen,
   GraduationCap,
   Layers,
+  Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -62,6 +63,9 @@ export default function NotesPage() {
 
   const [notes, setNotes] = useState<Note[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+
+  // Course grid search query.
+  const [courseSearch, setCourseSearch] = useState("");
 
   // View state: course grid → course detail → note viewer / upload.
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
@@ -144,6 +148,12 @@ export default function NotesPage() {
     }
     return cards;
   }, [courses, notes]);
+
+  const filteredCourseCards = useMemo(() => {
+    const q = courseSearch.trim().toLowerCase();
+    if (!q) return courseCards;
+    return courseCards.filter((c) => c.name.toLowerCase().includes(q));
+  }, [courseCards, courseSearch]);
 
   const detailNotes = selectedCourseId ? notesForCourse(selectedCourseId) : [];
 
@@ -618,11 +628,33 @@ export default function NotesPage() {
       ) : (
         /* ===================== COURSE GRID ===================== */
         <div className="space-y-5">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-xl font-semibold">Your courses</h2>
-            <Button onClick={openUpload}>
-              <Plus className="w-4 h-4 mr-2" /> New Notes
-            </Button>
+            <div className="flex items-center gap-2">
+              {courseCards.length > 0 && (
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={courseSearch}
+                    onChange={(e) => setCourseSearch(e.target.value)}
+                    placeholder="Search courses…"
+                    className="w-48 pl-9 sm:w-64"
+                  />
+                  {courseSearch && (
+                    <button
+                      onClick={() => setCourseSearch("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted-foreground hover:text-foreground"
+                      aria-label="Clear search"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              )}
+              <Button onClick={openUpload}>
+                <Plus className="w-4 h-4 mr-2" /> New Notes
+              </Button>
+            </div>
           </div>
 
           {courseCards.length === 0 ? (
