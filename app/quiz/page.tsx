@@ -347,6 +347,11 @@ export default function QuizPage() {
     setTextAnswers([]);
     setOpenGrades({});
     setFinalScore(0);
+    setHints({});
+    setRevealed(new Set());
+    setDiscussions({});
+    setAskOpen(false);
+    setAskInput("");
     setCurrentQ(0);
   };
 
@@ -365,13 +370,15 @@ export default function QuizPage() {
     const open = isOpen(q);
     const chosen = selectedAnswers[currentQ];
     const answered = open
-      ? (textAnswers[currentQ]?.trim().length ?? 0) > 0
+      ? (textAnswers[currentQ]?.trim().length ?? 0) > 0 || revealed.has(currentQ)
       : chosen !== null;
     const allAnswered = currentQuiz.questions.every((qq, i) =>
       (qq.type ?? "mcq") === "open"
-        ? (textAnswers[i]?.trim().length ?? 0) > 0
+        ? (textAnswers[i]?.trim().length ?? 0) > 0 || revealed.has(i)
         : selectedAnswers[i] !== null
     );
+    const gaveUp = revealed.has(currentQ);
+    const thread = discussions[currentQ] ?? [];
 
     return (
       <DashboardLayout>
@@ -410,12 +417,20 @@ export default function QuizPage() {
                       <Textarea
                         value={textAnswers[currentQ] ?? ""}
                         onChange={(e) => setTextAnswer(e.target.value)}
+                        disabled={gaveUp}
                         placeholder="Type your answer… it'll be graded by AI when you finish."
                         className="min-h-[140px]"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Open-ended answers are AI-graded with feedback after you finish the quiz.
-                      </p>
+                      {gaveUp && q.modelAnswer ? (
+                        <div className="p-4 bg-green-50 dark:bg-green-950/20 rounded-xl border border-green-200 dark:border-green-800">
+                          <p className="text-sm font-medium text-green-700 dark:text-green-400 mb-1">Model answer</p>
+                          <p className="text-sm text-green-700 dark:text-green-300">{q.modelAnswer}</p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">
+                          Open-ended answers are AI-graded with feedback after you finish the quiz.
+                        </p>
+                      )}
                     </>
                   ) : (
                     q.options.map((option, i) => {
