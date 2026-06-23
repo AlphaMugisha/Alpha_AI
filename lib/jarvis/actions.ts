@@ -108,6 +108,8 @@ export const ACTIONS_PROMPT = `You can ACT inside the app, not just talk. When t
 To perform actions, append ONE block to the very end of your reply, exactly like this:
 <actions>[ {"type":"...", ...}, ... ]</actions>
 
+CRITICAL: if your spoken reply claims or implies you did something (e.g. "Done — added that", "Opening your planner", "Deleted it"), you MUST include the matching action block. Saying you did it WITHOUT the block means nothing actually happens — that is a failure. Whenever in doubt, include the block. Output valid JSON only: double quotes, no trailing commas, no comments.
+
 Rules for the action block:
 - The text BEFORE the block is spoken to the user, so keep it short, natural and confident (e.g. "Done — added that to your planner."). NEVER read the block aloud or mention JSON.
 - Put the block only when an action is actually needed. For pure chat, omit it entirely.
@@ -161,12 +163,22 @@ export function parseActions(raw: string): ParsedReply {
 
   let actions: JarvisAction[] = [];
   if (jsonStr) {
-    try {
-      const parsed = JSON.parse(jsonStr.trim());
-      if (Array.isArray(parsed)) actions = parsed.filter((a) => a && a.type);
-      else if (parsed && parsed.type) actions = [parsed];
-    } catch {
-      actions = [];
+    // Tolerate common model JSON slips (trailing commas, smart quotes) so a
+    // tiny formatting error doesn't silently drop every action.
+    const cleaned = jsonStr
+      .trim()
+      .replace(/[“”]/g, '"')
+      .replace(/[‘’]/g, "'")
+      .replace(/,\s*([\]}])/g, "$1");
+    for (const candidate of [jsonStr.trim(), cleaned]) {
+      try {
+        const parsed = JSON.parse(candidate);
+        if (Array.isArray(parsed)) actions = parsed.filter((a) => a && a.type);
+        else if (parsed && parsed.type) actions = [parsed];
+        if (actions.length) break;
+      } catch {
+        /* try the cleaned variant next */
+      }
     }
   }
 
