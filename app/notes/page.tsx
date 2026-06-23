@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, isValidElement, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
 import { motion, AnimatePresence } from "framer-motion";
@@ -14,7 +14,7 @@ import { notesDb, coursesDb } from "@/lib/db";
 import { generateId, formatDate, formatFileSize } from "@/lib/utils";
 import { Note, Course } from "@/types";
 import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   FileText,
@@ -55,6 +55,31 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 const UNCATEGORIZED = "__uncategorized__";
+
+// Flatten a markdown node tree to plain text (to detect special blockquotes).
+function nodeText(node: ReactNode): string {
+  if (node == null || typeof node === "boolean") return "";
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(nodeText).join("");
+  if (isValidElement(node)) {
+    return nodeText((node.props as { children?: ReactNode }).children);
+  }
+  return "";
+}
+
+// Render the paper helper's "✍️ Exam answer" blockquote as a highlighted card.
+const noteMarkdownComponents: Components = {
+  blockquote({ children }) {
+    if (/exam answer/i.test(nodeText(children))) {
+      return (
+        <blockquote className="not-prose my-5 rounded-xl border-l-4 border-green-500 bg-green-50 px-4 py-3 text-[0.95rem] leading-relaxed text-green-900 shadow-sm dark:bg-green-950/30 dark:text-green-100 [&_p]:my-1 [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 [&_strong]:text-green-700 dark:[&_strong]:text-green-300">
+          {children}
+        </blockquote>
+      );
+    }
+    return <blockquote>{children}</blockquote>;
+  },
+};
 
 export default function NotesPage() {
   const router = useRouter();
@@ -497,47 +522,55 @@ export default function NotesPage() {
         </div>
       ) : selectedNote ? (
         /* ===================== NOTE VIEWER ===================== */
-        <div className="border rounded-xl bg-card overflow-hidden flex flex-col h-[calc(100vh-12rem)]">
-          <div className="p-4 border-b flex items-center justify-between gap-3">
+        <div className="border rounded-2xl bg-card overflow-hidden flex flex-col h-[calc(100vh-9rem)] shadow-sm">
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-5 py-3 border-b bg-card/60 backdrop-blur-sm">
             <div className="flex items-center gap-3 min-w-0">
-              <Button variant="ghost" size="sm" onClick={() => setSelectedNote(null)}>
+              <Button variant="ghost" size="icon" className="h-9 w-9 shrink-0" onClick={() => setSelectedNote(null)}>
                 <ArrowLeft className="w-4 h-4" />
               </Button>
               <div className="min-w-0">
-                <h3 className="font-semibold truncate">{selectedNote.title}</h3>
-                <p className="text-xs text-muted-foreground truncate">
-                  {courseName(selectedNote.courseId) && `${courseName(selectedNote.courseId)} · `}
-                  {formatDate(selectedNote.createdAt)}
-                  {selectedNote.sourceFile && ` · ${selectedNote.sourceFile}`}
-                </p>
+                <h3 className="font-semibold truncate leading-tight">{selectedNote.title}</h3>
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
+                  {courseName(selectedNote.courseId) && (
+                    <span className="rounded-full bg-primary/10 text-primary px-2 py-0.5 font-medium">
+                      {courseName(selectedNote.courseId)}
+                    </span>
+                  )}
+                  <span className="truncate">
+                    {formatDate(selectedNote.createdAt)}
+                    {selectedNote.sourceFile && ` · ${selectedNote.sourceFile}`}
+                  </span>
+                </div>
               </div>
             </div>
-            <div className="flex gap-2 shrink-0">
-              <Button size="sm" variant="outline" onClick={() => setFullscreen(true)} title="Read full screen">
-                <Maximize2 className="w-4 h-4" />
-              </Button>
+            <div className="flex items-center gap-1.5 shrink-0">
               <Button size="sm" variant="outline" onClick={() => router.push(`/quiz?note=${selectedNote.id}`)}>
-                <Brain className="w-4 h-4 mr-2" /> Make Quiz
+                <Brain className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Make Quiz</span>
               </Button>
               <Button
                 size="sm"
                 className="bg-gradient-to-r from-violet-600 to-indigo-600"
                 onClick={() => router.push(`/exam?lesson=${selectedNote.id}`)}
               >
-                <ClipboardCheck className="w-4 h-4 mr-2" /> Simulate Exam
+                <ClipboardCheck className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Simulate Exam</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => exportNote(selectedNote)} title="Export as Markdown">
+              <Button size="icon" className="h-9 w-9" variant="outline" onClick={() => setFullscreen(true)} title="Read full screen">
+                <Maximize2 className="w-4 h-4" />
+              </Button>
+              <Button size="icon" className="h-9 w-9" variant="outline" onClick={() => exportNote(selectedNote)} title="Export as Markdown">
                 <Download className="w-4 h-4" />
               </Button>
-              <Button size="sm" variant="outline" onClick={(e) => deleteNote(selectedNote.id, e)} title="Delete note">
+              <Button size="icon" className="h-9 w-9" variant="outline" onClick={(e) => deleteNote(selectedNote.id, e)} title="Delete note">
                 <Trash2 className="w-4 h-4" />
               </Button>
             </div>
           </div>
           <ScrollArea className="flex-1">
-            <div className="p-6 prose prose-sm dark:prose-invert max-w-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedNote.content}</ReactMarkdown>
-            </div>
+            <article className="mx-auto max-w-3xl px-6 sm:px-10 py-10 prose prose-base dark:prose-invert">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={noteMarkdownComponents}>
+                {selectedNote.content}
+              </ReactMarkdown>
+            </article>
           </ScrollArea>
         </div>
       ) : selectedCourseId ? (
@@ -668,9 +701,17 @@ export default function NotesPage() {
                 <Upload className="w-4 h-4 mr-2" /> Upload your first file
               </Button>
             </div>
+          ) : filteredCourseCards.length === 0 ? (
+            <div className="border rounded-xl bg-card p-12 text-center">
+              <Search className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
+              <p className="font-medium mb-1">No courses match “{courseSearch}”</p>
+              <Button variant="outline" size="sm" className="mt-2" onClick={() => setCourseSearch("")}>
+                Clear search
+              </Button>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {courseCards.map((c, i) => {
+              {filteredCourseCards.map((c, i) => {
                 const isUncat = c.id === UNCATEGORIZED;
                 return (
                   <motion.button
@@ -757,7 +798,9 @@ export default function NotesPage() {
             </div>
             <div className="flex-1 overflow-y-auto">
               <div className="mx-auto max-w-3xl px-6 py-10 prose prose-lg dark:prose-invert">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedNote.content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={noteMarkdownComponents}>
+                  {selectedNote.content}
+                </ReactMarkdown>
               </div>
             </div>
           </motion.div>

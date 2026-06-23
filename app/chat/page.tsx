@@ -81,8 +81,8 @@ function MessageBubble({ message }: { message: Message }) {
         className={cn(
           "group relative",
           isUser
-            ? "max-w-[80%] rounded-2xl rounded-tr-sm px-4 py-3 bg-primary text-primary-foreground"
-            : "max-w-[85%] pt-1"
+            ? "max-w-[80%] rounded-2xl rounded-tr-sm px-4 py-3 bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm"
+            : "max-w-[85%] rounded-2xl rounded-tl-sm border bg-card px-4 py-3 shadow-sm"
         )}
       >
         {isUser ? (
@@ -565,15 +565,15 @@ export default function ChatPage() {
               </div>
             )}
 
-            <div className="max-w-3xl mx-auto flex gap-3">
+            <div className="max-w-3xl mx-auto flex items-end gap-2 rounded-2xl border bg-background p-2 shadow-sm focus-within:border-primary/50 transition-colors">
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="icon"
                 onClick={() => fileRef.current?.click()}
                 disabled={attaching || isLoading}
                 title="Attach images or files (PDF, DOCX, TXT, MD)"
-                className="h-11 w-11 shrink-0"
+                className="h-10 w-10 shrink-0 text-muted-foreground hover:text-foreground"
               >
                 {attaching ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -586,14 +586,14 @@ export default function ChatPage() {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="Ask anything, or attach an image/file and prompt it… (Shift+Enter for new line)"
-                className="min-h-[44px] max-h-32 resize-none"
+                className="min-h-[40px] max-h-32 resize-none border-0 bg-transparent shadow-none focus-visible:ring-0 px-1"
                 rows={1}
               />
               <Button
                 onClick={sendMessage}
                 disabled={(!input.trim() && attachments.length === 0) || isLoading}
                 size="icon"
-                className="h-11 w-11 shrink-0 bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
+                className="h-10 w-10 shrink-0 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700"
               >
                 {isLoading ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
