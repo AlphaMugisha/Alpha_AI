@@ -8,6 +8,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
 import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateNotes } from "@/lib/ai";
+import { answerQuestionPaper } from "@/lib/paper";
 import { parseFile, validateFile } from "@/lib/fileParser";
 import { notesDb, coursesDb } from "@/lib/db";
 import { generateId, formatDate, formatFileSize } from "@/lib/utils";
@@ -46,6 +47,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/shared/PageHeader";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
