@@ -263,7 +263,7 @@ export default function SettingsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {/* Provider selector cards */}
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
                 {PROVIDERS.map((p) => {
                   const isActive = settings.aiProvider === p.id;
                   const hasKey =
@@ -273,7 +273,9 @@ export default function SettingsPage() {
                         ? hasOpenAIKey
                         : p.id === "anthropic"
                           ? hasAnthropicKey
-                          : hasGroqKey;
+                          : p.id === "groq"
+                            ? hasGroqKey
+                            : hasOpenRouterKey;
                   return (
                     <button
                       key={p.id}
@@ -366,6 +368,19 @@ export default function SettingsPage() {
                   onRemove={() => {
                     updateSettings({ groqApiKey: "" });
                     syncToCloud({ groq_api_key: "" });
+                  }}
+                />
+                <Separator />
+                <APIKeySection
+                  provider={PROVIDERS[4]}
+                  savedKey={settings.openrouterApiKey || ""}
+                  onSave={(key) => {
+                    updateSettings({ openrouterApiKey: key });
+                    syncToCloud({ openrouter_api_key: key });
+                  }}
+                  onRemove={() => {
+                    updateSettings({ openrouterApiKey: "" });
+                    syncToCloud({ openrouter_api_key: "" });
                   }}
                 />
               </div>
