@@ -99,6 +99,25 @@ function parseLoose<T>(text: string): T {
   }
 }
 
+/**
+ * The style of questions the student wants the AI to write.
+ *   - "mixed":     a natural blend of MCQ and open-ended (the original behaviour)
+ *   - "mcq":       multiple choice only (4 options each)
+ *   - "open":      open-ended / short-answer only
+ *   - "truefalse": true / false statements only
+ *   - "fill":      fill-in-the-blank only
+ *   - "mcq_open":  multiple choice + open-ended, 50/50
+ *   - "mcq_tf":    multiple choice + true/false
+ */
+export type QuizQuestionType =
+  | "mixed"
+  | "mcq"
+  | "open"
+  | "truefalse"
+  | "fill"
+  | "mcq_open"
+  | "mcq_tf";
+
 export interface QuizGenOptions {
   /** Desired number of questions. Omit to let the AI decide (~6-12). */
   count?: number;
@@ -110,6 +129,31 @@ export interface QuizGenOptions {
    * and turn them into a practice quiz (detecting MCQ vs open-ended per question).
    */
   mode?: "generate" | "practice";
+  /** Which kinds of questions the AI should produce. Defaults to "mixed". */
+  questionType?: QuizQuestionType;
+  /** Difficulty hint for fresh questions. Defaults to "balanced". */
+  difficulty?: "easy" | "balanced" | "hard";
+}
+
+/** Human-readable instruction describing the requested question style. */
+function describeQuestionType(type: QuizQuestionType): string {
+  switch (type) {
+    case "mcq":
+      return `Make EVERY question an "mcq" (multiple choice) with EXACTLY 4 options and one correct answer. Do NOT include any open-ended questions.`;
+    case "open":
+      return `Make EVERY question "open" (open-ended / short-answer) with a concise "modelAnswer". Do NOT include any multiple-choice questions.`;
+    case "truefalse":
+      return `Make EVERY question a true/false statement. Use type "mcq" with EXACTLY 2 options ["True","False"] and set "correctAnswer" to 0 for True or 1 for False. Phrase each as a statement to judge.`;
+    case "fill":
+      return `Make EVERY question a fill-in-the-blank. Use type "open"; write a sentence from the material with a key term replaced by "_____", and put the missing word/phrase in "modelAnswer".`;
+    case "mcq_open":
+      return `Use ONLY "mcq" (4 options) and "open" question types, in a roughly 50/50 split. No true/false.`;
+    case "mcq_tf":
+      return `Use ONLY multiple-choice questions: a mix of standard "mcq" (4 options) and true/false ("mcq" with 2 options ["True","False"]). No open-ended questions.`;
+    case "mixed":
+    default:
+      return `Produce a natural MIX of BOTH "mcq" and "open" types, varying difficulty and ordering as best fits the material.`;
+  }
 }
 
 export async function generateMixedQuiz(
@@ -117,15 +161,28 @@ export async function generateMixedQuiz(
   content: string,
   options: QuizGenOptions = {}
 ): Promise<QuizQuestion[]> {
-  const { count, instructions, mode = "generate" } = options;
+  const {
+    count,
+    instructions,
+    mode = "generate",
+    questionType = "mixed",
+    difficulty = "balanced",
+  } = options;
 
   const system =
     "You are an expert quiz writer. You write fair questions grounded STRICTLY " +
     "in the material provided. Output ONLY valid JSON.";
 
-  const typeGuide = `Each question is one of two types:
-  - "mcq": multiple choice with EXACTLY 4 options and one correct answer ("correctAnswer" = 0-based index).
+  const typeGuide = `Each question is one of two underlying types:
+  - "mcq": multiple choice with options and one correct answer ("correctAnswer" = 0-based index). Use EXACTLY 4 options unless told otherwise (true/false uses exactly 2: ["True","False"]).
   - "open": an open-ended / short-answer question needing a written response; provide a concise "modelAnswer" used to grade it.`;
+
+  const difficultyGuide =
+    difficulty === "easy"
+      ? `\nKeep the questions EASY — test recall of the most important facts.`
+      : difficulty === "hard"
+        ? `\nMake the questions HARD — test deep understanding, application, and edge cases.`
+        : "";
 
   let task: string;
   if (mode === "practice") {
@@ -143,7 +200,8 @@ ${
     ? `Create EXACTLY ${count} questions.`
     : `YOU decide the number of questions (aim for roughly 6-12).`
 }
-Produce a natural MIX of BOTH types, varying difficulty and ordering as best fits the material. Every question MUST be answerable from the material — no outside facts.`;
+${describeQuestionType(questionType)}${difficultyGuide}
+Every question MUST be answerable from the material — no outside facts.`;
   }
 
   const extra = instructions?.trim()

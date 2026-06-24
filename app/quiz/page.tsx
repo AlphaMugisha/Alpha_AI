@@ -7,7 +7,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useStudyData } from "@/hooks/useStudyData";
 import { useJarvisRefresh } from "@/hooks/useJarvisRefresh";
 import { generateQuiz } from "@/lib/ai";
-import { generateMixedQuiz, getQuizHint, askAboutQuestion } from "@/lib/quiz";
+import { generateMixedQuiz, getQuizHint, askAboutQuestion, type QuizQuestionType } from "@/lib/quiz";
 import { gradeShortAnswers, type ShortGradeInput } from "@/lib/exam";
 import { parseFile, validateFile } from "@/lib/fileParser";
 import { quizDb, notesDb } from "@/lib/db";
@@ -76,6 +76,8 @@ export default function QuizPage() {
   const [askLoading, setAskLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [numQuestions, setNumQuestions] = useState("10");
+  const [questionType, setQuestionType] = useState<QuizQuestionType>("mixed");
+  const [difficulty, setDifficulty] = useState<"easy" | "balanced" | "hard">("balanced");
   const [instructions, setInstructions] = useState("");
   const [practiceMode, setPracticeMode] = useState(false);
   const [inputContent, setInputContent] = useState("");
@@ -172,6 +174,8 @@ export default function QuizPage() {
         count: numQuestions === "auto" ? undefined : parseInt(numQuestions),
         instructions: instructions.trim() || undefined,
         mode: practiceMode ? "practice" : "generate",
+        questionType,
+        difficulty,
       });
       const baseName = uploadedFile?.name.replace(/\.[^.]+$/, "") || "Custom Quiz";
       const quiz: Quiz = {
@@ -797,6 +801,48 @@ export default function QuizPage() {
                 </div>
                 <Switch checked={practiceMode} onCheckedChange={setPracticeMode} />
               </div>
+
+              {/* Question type & difficulty — only when generating fresh questions */}
+              {!practiceMode && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm mb-2 block">Question type</Label>
+                    <Select
+                      value={questionType}
+                      onValueChange={(v) => setQuestionType(v as QuizQuestionType)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mixed">Mixed (recommended)</SelectItem>
+                        <SelectItem value="mcq">Multiple choice only</SelectItem>
+                        <SelectItem value="open">Open-ended / short answer</SelectItem>
+                        <SelectItem value="truefalse">True / False</SelectItem>
+                        <SelectItem value="fill">Fill in the blank</SelectItem>
+                        <SelectItem value="mcq_open">Multiple choice + open-ended</SelectItem>
+                        <SelectItem value="mcq_tf">Multiple choice + True/False</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm mb-2 block">Difficulty</Label>
+                    <Select
+                      value={difficulty}
+                      onValueChange={(v) => setDifficulty(v as "easy" | "balanced" | "hard")}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="easy">Easy</SelectItem>
+                        <SelectItem value="balanced">Balanced</SelectItem>
+                        <SelectItem value="hard">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
               {/* Optional free-form prompt */}
               <div>
