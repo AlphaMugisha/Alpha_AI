@@ -123,7 +123,9 @@ export async function generateFlashcards(
         ? anthropicLib.generateFlashcards(config.apiKey, content, numCards)
         : config.provider === "groq"
           ? groqLib.generateFlashcards(config.apiKey, content, numCards)
-          : gemini.generateFlashcards(config.apiKey, content, numCards)
+          : config.provider === "openrouter"
+            ? openrouterLib.generateFlashcards(config.apiKey, content, numCards)
+            : gemini.generateFlashcards(config.apiKey, content, numCards)
   );
 }
 
@@ -140,7 +142,9 @@ export async function explainTopic(
         ? anthropicLib.explainTopic(config.apiKey, topic, difficulty, additionalContext)
         : config.provider === "groq"
           ? groqLib.explainTopic(config.apiKey, topic, difficulty, additionalContext)
-          : gemini.explainTopic(config.apiKey, topic, difficulty, additionalContext)
+          : config.provider === "openrouter"
+            ? openrouterLib.explainTopic(config.apiKey, topic, difficulty, additionalContext)
+            : gemini.explainTopic(config.apiKey, topic, difficulty, additionalContext)
   );
 }
 
@@ -158,6 +162,8 @@ export async function generateStudyPlan(
         ? anthropicLib.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
         : config.provider === "groq"
           ? groqLib.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
-          : gemini.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
+          : config.provider === "openrouter"
+            ? openrouterLib.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
+            : gemini.generateStudyPlan(config.apiKey, subject, goal, timeAvailable, currentLevel)
   );
 }
