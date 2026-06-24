@@ -52,6 +52,7 @@ export const settingsStorage = {
       openaiApiKey: "",
       anthropicApiKey: "",
       groqApiKey: "",
+      openrouterApiKey: "",
       aiProvider: "gemini",
       theme: "system",
       defaultDifficulty: "intermediate",

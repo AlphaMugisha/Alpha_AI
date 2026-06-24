@@ -21,7 +21,8 @@ export interface Profile {
   openai_api_key: string;
   anthropic_api_key: string;
   groq_api_key: string;
-  openrouter_api_key: string;
+  // Optional until the profiles.openrouter_api_key column ships (see AuthContext select note).
+  openrouter_api_key?: string;
   ai_provider: string;
   daily_goal_minutes: number;
   default_difficulty: string;
@@ -62,7 +63,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .from("profiles")
           // Explicit columns — never ship github_token to the browser.
           .select(
-            "id, full_name, avatar_url, username, phone, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, openrouter_api_key, ai_provider, daily_goal_minutes, default_difficulty, notifications_enabled, created_at, updated_at"
+            // NOTE: openrouter_api_key is intentionally omitted until the
+            // `profiles.openrouter_api_key` column is added (see migration
+            // add_openrouter_api_key_to_profiles). Selecting a missing column
+            // errors the whole profile fetch. Until then the OpenRouter key is
+            // stored in localStorage only.
+            "id, full_name, avatar_url, username, phone, gemini_api_key, openai_api_key, anthropic_api_key, groq_api_key, ai_provider, daily_goal_minutes, default_difficulty, notifications_enabled, created_at, updated_at"
           )
           .eq("id", userId)
           .single();
