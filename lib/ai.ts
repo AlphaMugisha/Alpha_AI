@@ -69,7 +69,9 @@ export async function generateStructured(
         ? anthropicLib.generateJSON(config.apiKey, prompt, systemPrompt)
         : config.provider === "groq"
           ? groqLib.generateJSON(config.apiKey, prompt, systemPrompt)
-          : gemini.generateJSON(config.apiKey, prompt, systemPrompt)
+          : config.provider === "openrouter"
+            ? openrouterLib.generateJSON(config.apiKey, prompt, systemPrompt)
+            : gemini.generateJSON(config.apiKey, prompt, systemPrompt)
   );
 }
 
@@ -85,7 +87,9 @@ export async function generateNotes(
         ? anthropicLib.generateNotes(config.apiKey, content, title)
         : config.provider === "groq"
           ? groqLib.generateNotes(config.apiKey, content, title)
-          : gemini.generateNotes(config.apiKey, content, title)
+          : config.provider === "openrouter"
+            ? openrouterLib.generateNotes(config.apiKey, content, title)
+            : gemini.generateNotes(config.apiKey, content, title)
   );
 }
 
@@ -101,7 +105,9 @@ export async function generateQuiz(
         ? anthropicLib.generateQuiz(config.apiKey, content, numQuestions)
         : config.provider === "groq"
           ? groqLib.generateQuiz(config.apiKey, content, numQuestions)
-          : gemini.generateQuiz(config.apiKey, content, numQuestions)
+          : config.provider === "openrouter"
+            ? openrouterLib.generateQuiz(config.apiKey, content, numQuestions)
+            : gemini.generateQuiz(config.apiKey, content, numQuestions)
   );
 }
 
