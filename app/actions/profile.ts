@@ -12,6 +12,7 @@ interface ProfileUpdate {
   openai_api_key?: string;
   anthropic_api_key?: string;
   groq_api_key?: string;
+  openrouter_api_key?: string;
   ai_provider?: string;
   daily_goal_minutes?: number;
   default_difficulty?: string;

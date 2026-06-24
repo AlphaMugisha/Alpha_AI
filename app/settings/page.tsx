@@ -80,6 +80,15 @@ const PROVIDERS = [
     keyHint: "Get a FREE key at console.groq.com — no credit card needed",
     keyUrl: "https://console.groq.com/keys",
   },
+  {
+    id: "openrouter" as AIProvider,
+    name: "OpenRouter (Free)",
+    model: "llama-3.3-70b-instruct:free",
+    logo: "🜨",
+    color: "from-indigo-500 to-violet-600",
+    keyHint: "Get a FREE key at openrouter.ai — one key, many free models",
+    keyUrl: "https://openrouter.ai/keys",
+  },
 ];
 
 function APIKeySection({
@@ -189,7 +198,7 @@ function APIKeySection({
 }
 
 export default function SettingsPage() {
-  const { settings, updateSettings, hasGeminiKey, hasOpenAIKey, hasAnthropicKey, hasGroqKey, aiConfig } = useSettings();
+  const { settings, updateSettings, hasGeminiKey, hasOpenAIKey, hasAnthropicKey, hasGroqKey, hasOpenRouterKey, aiConfig } = useSettings();
   const { user, refreshProfile } = useAuth();
   const { setTheme } = useTheme();
   const [, startTransition] = useTransition();
