@@ -374,14 +374,13 @@ export default function SettingsPage() {
                 <APIKeySection
                   provider={PROVIDERS[4]}
                   savedKey={settings.openrouterApiKey || ""}
-                  // Cloud sync intentionally omitted until the
-                  // profiles.openrouter_api_key column ships (writing a missing
-                  // column errors the update). Stored in localStorage for now.
                   onSave={(key) => {
                     updateSettings({ openrouterApiKey: key });
+                    syncToCloud({ openrouter_api_key: key });
                   }}
                   onRemove={() => {
                     updateSettings({ openrouterApiKey: "" });
+                    syncToCloud({ openrouter_api_key: "" });
                   }}
                 />
               </div>
