@@ -153,6 +153,7 @@ export interface UserSettings {
   openaiApiKey: string;
   anthropicApiKey: string;
   groqApiKey: string;
+  openrouterApiKey: string;
   aiProvider: AIProvider;
   theme: "light" | "dark" | "system";
   defaultDifficulty: "beginner" | "intermediate" | "advanced";
@@ -204,7 +205,7 @@ export interface CodingProject {
 
 export type Difficulty = "beginner" | "intermediate" | "advanced";
 
-export type AIProvider = "gemini" | "openai" | "anthropic" | "groq";
+export type AIProvider = "gemini" | "openai" | "anthropic" | "groq" | "openrouter";
 
 export interface AIConfig {
   provider: AIProvider;
