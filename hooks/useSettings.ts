@@ -10,6 +10,7 @@ const DEFAULT_SETTINGS: UserSettings = {
   openaiApiKey: "",
   anthropicApiKey: "",
   groqApiKey: "",
+  openrouterApiKey: "",
   aiProvider: "gemini",
   theme: "system",
   defaultDifficulty: "intermediate",
@@ -36,6 +37,7 @@ export function useSettings() {
       openaiApiKey: prev.openaiApiKey || profile.openai_api_key || "",
       anthropicApiKey: prev.anthropicApiKey || profile.anthropic_api_key || "",
       groqApiKey: prev.groqApiKey || profile.groq_api_key || "",
+      openrouterApiKey: prev.openrouterApiKey || profile.openrouter_api_key || "",
       aiProvider: (profile.ai_provider as UserSettings["aiProvider"]) || prev.aiProvider,
       dailyGoalMinutes: profile.daily_goal_minutes ?? prev.dailyGoalMinutes,
       defaultDifficulty:
@@ -58,7 +60,9 @@ export function useSettings() {
         ? settings.anthropicApiKey
         : provider === "groq"
           ? settings.groqApiKey
-          : settings.geminiApiKey;
+          : provider === "openrouter"
+            ? settings.openrouterApiKey
+            : settings.geminiApiKey;
 
   const aiConfig: AIConfig = {
     provider,
@@ -70,6 +74,7 @@ export function useSettings() {
   const hasOpenAIKey = (settings.openaiApiKey || "").trim().length > 0;
   const hasAnthropicKey = (settings.anthropicApiKey || "").trim().length > 0;
   const hasGroqKey = (settings.groqApiKey || "").trim().length > 0;
+  const hasOpenRouterKey = (settings.openrouterApiKey || "").trim().length > 0;
 
   return {
     settings,
@@ -80,5 +85,6 @@ export function useSettings() {
     hasOpenAIKey,
     hasAnthropicKey,
     hasGroqKey,
+    hasOpenRouterKey,
   };
 }
