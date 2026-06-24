@@ -5,7 +5,7 @@
  */
 export function friendlyAIError(
   err: unknown,
-  provider: "openai" | "gemini" | "anthropic" | "groq"
+  provider: "openai" | "gemini" | "anthropic" | "groq" | "openrouter"
 ): Error {
   const name =
     provider === "openai"
@@ -14,7 +14,9 @@ export function friendlyAIError(
         ? "Claude"
         : provider === "groq"
           ? "Groq"
-          : "Gemini";
+          : provider === "openrouter"
+            ? "OpenRouter"
+            : "Gemini";
   const raw = err instanceof Error ? err.message : String(err);
   const lower = raw.toLowerCase();
   // SDKs expose the HTTP status in a few different shapes.
