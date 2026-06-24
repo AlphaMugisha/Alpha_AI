@@ -3,6 +3,7 @@ import * as gemini from "./gemini";
 import * as openaiLib from "./openai";
 import * as anthropicLib from "./anthropic";
 import * as groqLib from "./groq";
+import * as openrouterLib from "./openrouter";
 import { friendlyAIError } from "./aiErrors";
 
 type GeminiHistory = { role: "user" | "model"; parts: { text: string }[] }[];
@@ -49,7 +50,9 @@ export async function generateChatResponse(
         ? anthropicLib.generateChatResponse(config.apiKey, toChatMessages(history), systemPrompt)
         : config.provider === "groq"
           ? groqLib.generateChatResponse(config.apiKey, toChatMessages(history), systemPrompt)
-          : gemini.generateChatResponse(config.apiKey, history, systemPrompt)
+          : config.provider === "openrouter"
+            ? openrouterLib.generateChatResponse(config.apiKey, toChatMessages(history), systemPrompt)
+            : gemini.generateChatResponse(config.apiKey, history, systemPrompt)
   );
 }
 
